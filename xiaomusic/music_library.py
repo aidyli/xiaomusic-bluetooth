@@ -582,6 +582,12 @@ class MusicLibrary:
         Returns:
             list: 匹配的音乐名称列表
         """
+        # 精确命中时不要进入全量模糊搜索。大曲库下 difflib 需要扫描所有歌曲，
+        # 播放列表里传入的 music_name 通常就是精确歌名，直接返回可避免数万歌曲时
+        # 每次播放都卡十几秒。
+        if name in self.all_music:
+            return [name]
+
         if not self.config.enable_fuzzy_match:
             self.log.debug("没开启模糊匹配")
             return []

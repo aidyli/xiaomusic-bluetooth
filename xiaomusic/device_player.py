@@ -221,11 +221,14 @@ class XiaoMusicDevice:
             else:
                 # 3：增量更新 (Incremental Update)
                 old_list = self._play_list
+                latest_set = set(latest_list)
+                old_set = set(old_list)
+
                 # A. 剔除云端已经被删除的歌，保留依然存在的歌（绝对不改变它们的相对顺序！）
-                self._play_list = [s for s in old_list if s in latest_list]
+                self._play_list = [s for s in old_list if s in latest_set]
 
                 # B. 找出最新歌单里多出来的新歌（比如 auto_add_song 追加进来的）
-                new_songs = [s for s in latest_list if s not in old_list]
+                new_songs = [s for s in latest_list if s not in old_set]
                 if new_songs:
                     # 把新来的歌单独洗乱，然后悄悄垫在牌堆的最底下
                     random.shuffle(new_songs)
