@@ -278,7 +278,29 @@ class Config:
             if k not in self.key_match_order:
                 self.key_match_order.append(k)
 
+    def normalize_hostname(self):
+        """Normalize the public hostname used in URLs sent to XiaoAI devices.
+
+        Old setting.json files can contain an empty hostname. If that empty value is
+        used directly, playback URLs become invalid strings like
+        ``:58090/music/...``: XiaoAI may accept the play command and show a moving
+        progress bar, but it cannot fetch any audio. Treat blank as unset and fall
+        back to the configured/default hostname instead.
+        """
+        hostname = (self.hostname or "").strip()
+        if not hostname:
+            hostname = os.getenv("XIAOMUSIC_HOSTNAME", "http://192.168.2.5")
+        if not hostname.startswith(("http://", "https://")):
+            hostname = f"http://{hostname}"
+        self.hostname = hostname.rstrip("/")
+
+    def get_public_base_url(self):
+        """Return the public base URL used by devices to fetch media files."""
+        self.normalize_hostname()
+        return f"{self.hostname}:{self.public_port}"
+
     def init(self):
+        self.normalize_hostname()
         self.key_match_order = default_key_match_order()
         self.key_word_dict = default_key_word_dict()
         self.append_keyword(self.keywords_playlocal, "playlocal")
@@ -300,9 +322,7 @@ class Config:
     def __post_init__(self) -> None:
         if self.proxy:
             validate_proxy(self.proxy)
-        if self.hostname:
-            if not self.hostname.startswith(("http://", "https://")):
-                self.hostname = f"http://{self.hostname}"  # 默认 http
+        self.normalize_hostname()
 
         self.init()
         # 保存配置到 config-example.json 文件
@@ -461,5 +481,4 @@ class Config:
 
     def get_self_netloc(self):
         """获取网络地址"""
-        host = self.hostname.split("//", 1)[1]
-        return f"{host}:{self.public_port}"
+        return self.get_public_base_url().split("//", 1)[1]

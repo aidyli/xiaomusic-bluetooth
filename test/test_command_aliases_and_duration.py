@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from xiaomusic.command_handler import CommandHandler
 from xiaomusic.config import Config
+from xiaomusic.music_library import MusicLibrary
 from xiaomusic.utils.music_utils import get_duration_by_ffprobe
 
 
@@ -48,6 +49,26 @@ def test_voice_alias_play_local_music_matches_even_with_old_keyword_config():
     opvalue, oparg = handler.match_cmd(device, "播放本地音乐", ctrl_panel=False)
 
     assert (opvalue, oparg) == ("playlocal", "")
+
+
+def test_blank_hostname_is_normalized_before_generating_local_music_url(monkeypatch):
+    monkeypatch.setenv("XIAOMUSIC_HOSTNAME", "192.168.0.100")
+    config = Config(hostname="", public_port=58090, music_path="music")
+    library = MusicLibrary(config=config, log=DummyLog())
+
+    url = library._get_file_url("music/歌手 - 测试.wav")
+
+    assert url.startswith("http://192.168.0.100:58090/music/")
+    assert not url.startswith(":58090")
+
+
+def test_update_config_blank_hostname_keeps_valid_public_base(monkeypatch):
+    monkeypatch.setenv("XIAOMUSIC_HOSTNAME", "http://192.168.0.100")
+    config = Config(hostname="http://192.168.0.5", public_port=58090)
+
+    config.update_config({"hostname": ""})
+
+    assert config.get_public_base_url() == "http://192.168.0.100:58090"
 
 
 def test_ffprobe_non_json_failure_does_not_log_json_decode_noise(monkeypatch, caplog):

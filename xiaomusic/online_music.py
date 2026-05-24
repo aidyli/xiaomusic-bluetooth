@@ -814,7 +814,7 @@ class OnlineMusicService:
         """获取静态音频文件的完整 URL"""
         config = self.xiaomusic.config
         if config and hasattr(config, "hostname") and hasattr(config, "public_port"):
-            proxy_base = f"{config.hostname}:{config.public_port}"
+            proxy_base = config.get_public_base_url()
         else:
             proxy_base = "http://192.168.31.241:8090"  # 之前代码中就有的ip，我保留。
         # return proxy_base + "/static/search.mp3"
