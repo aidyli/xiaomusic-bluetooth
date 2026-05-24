@@ -1212,18 +1212,23 @@ class XiaoMusicDevice:
         await self.do_tts(f"收到,{minute}分钟后将关机")
 
     async def cancel_next_timer(self):
-        """取消下一首定时器"""
-        self.log.info(f"cancel_next_timer did: {self.did}")
-        if self._next_timer:
-            self._next_timer.cancel()
-            try:
-                await self._next_timer
-            except asyncio.CancelledError:
-                pass
-            self.log.info(f"下一曲定时器已取消 did: {self.did}")
-            self._next_timer = None
-        else:
-            self.log.info(f"下一曲定时器不见了 did: {self.did}")
+        """取消下一首定时器。
+
+        没有定时器是正常状态：首次播放、手动切歌后重新设置定时器、
+        以及组播取消其他设备定时器时都会走到这里。不要在 INFO 日志里刷
+        “定时器不见了”，否则容易被误判为播放异常。
+        """
+        if not self._next_timer:
+            self.log.debug(f"无需取消下一曲定时器 did: {self.did}")
+            return
+
+        self._next_timer.cancel()
+        try:
+            await self._next_timer
+        except asyncio.CancelledError:
+            pass
+        self.log.info(f"下一曲定时器已取消 did: {self.did}")
+        self._next_timer = None
 
     async def cancel_group_next_timer(self):
         """取消组内所有设备的下一首定时器"""
