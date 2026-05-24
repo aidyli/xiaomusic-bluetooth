@@ -21,7 +21,15 @@ from xiaomusic.utils.system_utils import validate_proxy
 def default_key_word_dict():
     return {
         "下一首": "play_next",
+        "下一曲": "play_next",
+        "播放下一首": "play_next",
+        "播放下一曲": "play_next",
         "上一首": "play_prev",
+        "上一曲": "play_prev",
+        "播放上一首": "play_prev",
+        "播放上一曲": "play_prev",
+        "播放本地音乐": "playlocal",
+        "本地播放音乐": "playlocal",
         "单曲循环": "set_play_type_one",
         "全部循环": "set_play_type_all",
         "随机播放": "set_play_type_rnd",
@@ -54,8 +62,16 @@ KEY_WORD_ARG_BEFORE_DICT = {
 def default_key_match_order():
     return [
         "分钟后关机",
+        "播放下一首",
+        "播放下一曲",
         "下一首",
+        "下一曲",
+        "播放上一首",
+        "播放上一曲",
         "上一首",
+        "上一曲",
+        "播放本地音乐",
+        "本地播放音乐",
         "单曲循环",
         "全部循环",
         "随机播放",
@@ -157,7 +173,7 @@ class Config:
     enable_config_example: bool = False
 
     keywords_playlocal: str = os.getenv(
-        "XIAOMUSIC_KEYWORDS_PLAYLOCAL", "播放本地歌曲,本地播放歌曲"
+        "XIAOMUSIC_KEYWORDS_PLAYLOCAL", "播放本地歌曲,本地播放歌曲,播放本地音乐,本地播放音乐"
     )
     keywords_play: str = os.getenv("XIAOMUSIC_KEYWORDS_PLAY", "播放歌曲,放歌曲")
     keywords_online_play: str = os.getenv("XIAOMUSIC_KEYWORDS_ONLINE_PLAY", "在线播放")

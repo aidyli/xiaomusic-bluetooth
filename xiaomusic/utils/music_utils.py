@@ -269,21 +269,32 @@ def get_duration_by_ffprobe(file_path: str, ffmpeg_location: str) -> float:
         full_command = " ".join(cmd_args)
         log.info(f"待执行的完整命令 ffprobe command: {full_command}")
 
-        # 使用 ffprobe 获取文件的元数据，并以 JSON 格式输出
+        # 使用 ffprobe 获取文件的元数据，并以 JSON 格式输出。
+        # 部分历史压缩包里的 WAV 文件名/内容异常，ffprobe 会把非 JSON 错误文本输出到 stderr。
+        # stderr 不要混进 stdout 再做 json.loads，否则会刷屏 JSONDecodeError。
         result = subprocess.run(
             cmd_args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
 
-        # 输出命令执行结果
+        stdout = result.stdout.strip()
+        stderr = result.stderr.strip()
+        if result.returncode != 0 or not stdout.startswith("{"):
+            detail = stderr or stdout
+            log.warning(
+                f"ffprobe failed for local music {file_path}, return code: {result.returncode}, output: {detail}"
+            )
+            return 0
+
         log.info(
-            f"命令执行结果 command result - return code: {result.returncode}, stdout: {result.stdout}"
+            f"命令执行结果 command result - return code: {result.returncode}, stdout: {stdout}"
         )
 
         # 解析 JSON 输出
-        ffprobe_output = json.loads(result.stdout)
+        ffprobe_output = json.loads(stdout)
 
         # 获取时长
         duration = float(ffprobe_output["format"]["duration"])
