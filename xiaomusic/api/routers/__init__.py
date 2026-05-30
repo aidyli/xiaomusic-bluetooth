@@ -2,6 +2,7 @@
 
 from xiaomusic.api import websocket
 from xiaomusic.api.routers import (
+    bluetooth,
     device,
     dlna,
     file,
@@ -26,4 +27,5 @@ def register_routers(app):
     app.include_router(plugin.router, tags=["插件管理"])
     app.include_router(file.router, tags=["文件操作"])
     app.include_router(dlna.router, tags=["DLNA/UPnP"])
+    app.include_router(bluetooth.router, tags=["蓝牙 Sidecar"])
     app.include_router(websocket.router, tags=["WebSocket"])

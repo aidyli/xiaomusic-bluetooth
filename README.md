@@ -149,6 +149,13 @@ docker run -p 58090:8090 -v /xiaomusic_music:/app/music -v /xiaomusic_conf:/app/
 - **全部循环** - 循环播放所有歌曲
 - **随机播放** - 随机顺序播放
 
+### 组播放、播放列表选择与蓝牙 sidecar 修复
+
+- 同一 `group_list` 内的多台设备现在会同步播放运行态，包括 `is_playing`、开始时间、时长、暂停偏移和播放 session；任一设备发起新播放时会废弃组内旧 session/timer，避免其他设备的旧进度条或旧下一首定时器影响当前播放。
+- Web 首页手动选择播放列表时，不再被 WebSocket 推送的“正在播放歌曲所在列表”强制拉回；当前播放信息和进度仍会继续更新。
+- Web 设置页支持蓝牙 sidecar 状态刷新、扫描、连接、断开，并对请求追加 cache-buster，避免浏览器/代理缓存导致按钮看似无效。
+- 本地部署版本建议通过镜像 tag 和页面部署标识同时识别；当前 sidecar 修复镜像 tag 为 `xiaomusic:bluetooth-combo-group-playlist-sidecar-fix-20260530-r4`，播放命令应指向 `/host-scripts/call-xiaomi-bt-sidecar.sh {url}`，停止命令应指向 `/host-scripts/stop-xiaomi-bt-sidecar.sh`。
+
 #### 歌单管理
 - **播放歌单+目录名** - 例如：播放歌单其他
 - **播放歌单第几个+列表名** - 详见 [#158](https://github.com/hanxi/xiaomusic/issues/158)

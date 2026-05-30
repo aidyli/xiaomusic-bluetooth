@@ -45,10 +45,68 @@ function announceToScreenReader(message) {
 let pendingPlaybackCommand = null;
 let pendingPlaybackCommandDeadline = 0;
 let lastSyncedPlaybackKey = "";
+let allowPlayingSelectionSync = false;
+let userSelectedPlaylistAt = 0;
+let latestMusicListData = {};
+const PLAYING_SELECTION_SYNC_WINDOW_MS = 12000;
 
 function markPendingPlaybackCommand(direction) {
   pendingPlaybackCommand = direction;
   pendingPlaybackCommandDeadline = Date.now() + 15000;
+}
+
+function markUserSelectedPlaylist() {
+  userSelectedPlaylistAt = Date.now();
+}
+
+function runWithPlayingSelectionSync(callback) {
+  allowPlayingSelectionSync = true;
+  try {
+    callback();
+  } finally {
+    allowPlayingSelectionSync = false;
+  }
+}
+
+function isOnlinePlaylistName(name) {
+  return !!name && String(name).startsWith("_online_");
+}
+
+function findPlaylistContainingMusic(musicName, preferredPlaylist) {
+  if (!musicName || !latestMusicListData) return "";
+  if (preferredPlaylist && Array.isArray(latestMusicListData[preferredPlaylist])) {
+    if (latestMusicListData[preferredPlaylist].includes(musicName)) return preferredPlaylist;
+  }
+  const skip = new Set(["全部", "所有歌曲", "所有电台"]);
+  for (const [listName, songs] of Object.entries(latestMusicListData)) {
+    if (skip.has(listName) || isOnlinePlaylistName(listName) || !Array.isArray(songs)) continue;
+    if (songs.includes(musicName)) return listName;
+  }
+  for (const fallbackName of ["所有歌曲", "全部", "所有电台"]) {
+    const songs = latestMusicListData[fallbackName];
+    if (Array.isArray(songs) && songs.includes(musicName)) return fallbackName;
+  }
+  return "";
+}
+
+function shouldUpdatePlaylistFromPlaying(curPlaylist) {
+  if (!curPlaylist) return false;
+  if (allowPlayingSelectionSync) return true;
+
+  const currentPlaylist = $("#music_list").val() || localStorage.getItem("cur_playlist") || "";
+  const userJustSelected = Date.now() - userSelectedPlaylistAt < PLAYING_SELECTION_SYNC_WINDOW_MS;
+
+  if (userJustSelected) {
+    return false;
+  }
+
+  // 语音指令播放本地歌曲时，前端可能仍停留在上一轮在线播放临时歌单（如 _online_webPush）。
+  // 这种状态不是用户正在浏览本地歌单，而是旧播放态残留；允许 WebSocket 用后端当前本地歌单把 UI 拉回正确列表。
+  if (isOnlinePlaylistName(currentPlaylist) && !isOnlinePlaylistName(curPlaylist)) {
+    return true;
+  }
+
+  return false;
 }
 
 // 批量填充 select 选项（优化读屏性能）
@@ -530,20 +588,32 @@ function shouldSyncPlayingSelection(curPlaylist, curMusic) {
 function syncPlayingSelection(curPlaylist, curMusic) {
   if (!curMusic) return;
   if (!shouldSyncPlayingSelection(curPlaylist, curMusic)) return;
-  // 先写 localStorage，#music_list change 回填歌曲列表时会读取 cur_music 作为默认选中项。
+  // 先写当前播放歌曲；不要在普通 WebSocket/当前播放同步中覆盖 cur_playlist。
+  // cur_playlist 代表用户当前正在浏览/选择的播放列表，覆盖它会导致后续刷新/兜底同步
+  // 把下拉框拉回正在播放歌曲所在列表。
   localStorage.setItem("cur_music", curMusic);
-  if (curPlaylist) {
-    localStorage.setItem("cur_playlist", curPlaylist);
-  }
 
   const $musicList = $("#music_list");
   const $musicName = $("#music_name");
+  const currentPlaylist = $musicList.val() || localStorage.getItem("cur_playlist") || "";
+  let effectivePlaylist = curPlaylist;
 
-  if (curPlaylist && $musicList.length && $musicList.val() !== curPlaylist) {
-    if ($musicList.find(`option[value="${$.escapeSelector(curPlaylist)}"]`).length > 0) {
-      $musicList.val(curPlaylist);
-      // 切换歌单会重建 #music_name，且会根据 localStorage.cur_music 选中当前歌曲。
-      $musicList.trigger("change");
+  // 从线上临时歌单切回本地语音播放时，后端偶尔仍会短暂推送旧的 _online_* cur_playlist。
+  // 只要当前播放歌曲能在本地歌单中定位，就用本地歌单修正 UI，而不是继续卡在线上播放列表。
+  if (isOnlinePlaylistName(currentPlaylist)) {
+    const localPlaylist = findPlaylistContainingMusic(curMusic, curPlaylist);
+    if (localPlaylist && !isOnlinePlaylistName(localPlaylist)) {
+      effectivePlaylist = localPlaylist;
+    }
+  }
+
+  if (effectivePlaylist && $musicList.length && $musicList.val() !== effectivePlaylist) {
+    if (shouldUpdatePlaylistFromPlaying(effectivePlaylist) && $musicList.find(`option[value="${$.escapeSelector(effectivePlaylist)}"]`).length > 0) {
+      $musicList.val(effectivePlaylist);
+      // 只有初始化/设备切换等明确需要跟随“正在播放”的场景才切换歌单；用户手动选择歌单时，
+      // WebSocket 推送的当前播放状态只更新当前歌曲/进度，不再把选择框拉回正在播放歌曲所在列表。
+      runWithPlayingSelectionSync(() => $musicList.trigger("change"));
+      localStorage.setItem("cur_playlist", effectivePlaylist);
     }
   }
 
@@ -558,7 +628,8 @@ function show_now_player_music_name(){
       setTimeout(() => {
       let now_player_music_name = $("#playering-music").text();
       now_player_music_name = now_player_music_name.replace("【播放中】 ","").replace("【空闲中】 ","")
-  // 直接通过当前 DOM 文本兜底同步时不要套用上一首/下一首的 pending 保护。
+  // 直接通过当前 DOM 文本兜底同步时不要套用上一首/下一首的 pending 保护；但也不要
+  // 把用户刚手动选择的歌单强制拉回“正在播放”所在歌单。
   pendingPlaybackCommand = null;
   syncPlayingSelection(localStorage.getItem("cur_playlist"), now_player_music_name);
     }, 1000);
@@ -1020,6 +1091,7 @@ function _refresh_music_list(callback) {
   $("#music_list").empty();
   $.get("/musiclist", function (data, status) {
     console.log(data, status);
+    latestMusicListData = data || {};
     favoritelist = Array.isArray(data["收藏"]) ? data["收藏"] : [];
 
     // 收集所有播放列表选项
@@ -1040,7 +1112,10 @@ function _refresh_music_list(callback) {
       `播放列表已加载，共 ${playlistOptions.length} 个列表`,
     );
 
-    $("#music_list").change(function () {
+    $("#music_list").off("change.playlist").on("change.playlist", function () {
+      if (!allowPlayingSelectionSync) {
+        markUserSelectedPlaylist();
+      }
       const selectedValue = $(this).val();
       localStorage.setItem("cur_playlist", selectedValue);
       $("#music_name").empty();
@@ -1112,7 +1187,7 @@ function _refresh_music_list(callback) {
       // 恢复歌单选择
       if (savedPlaylist && data.hasOwnProperty(savedPlaylist)) {
         $("#music_list").val(savedPlaylist);
-        $("#music_list").trigger("change");
+        runWithPlayingSelectionSync(() => $("#music_list").trigger("change"));
 
         // 等待歌单切换完成后，恢复歌曲选择
         setTimeout(function () {
@@ -1126,24 +1201,35 @@ function _refresh_music_list(callback) {
         }, 100);
       } else {
         // 没有保存的歌单，使用默认
-        $("#music_list").trigger("change");
+        runWithPlayingSelectionSync(() => $("#music_list").trigger("change"));
       }
       callback();
     } else {
       // 设备模式：使用原有逻辑
-      $("#music_list").trigger("change");
+      runWithPlayingSelectionSync(() => $("#music_list").trigger("change"));
 
       // 获取当前播放列表
       $.get(`/curplaylist?did=${did}`, function (playlist, status) {
         if (playlist != "") {
-          $("#music_list").val(playlist);
-          $("#music_list").trigger("change");
+          const savedBrowsePlaylist = localStorage.getItem("cur_playlist") || "";
+          if (isOnlinePlaylistName(savedBrowsePlaylist) && !isOnlinePlaylistName(playlist)) {
+            $("#music_list").val(playlist);
+            runWithPlayingSelectionSync(() => $("#music_list").trigger("change"));
+            localStorage.setItem("cur_playlist", playlist);
+          } else if (!savedBrowsePlaylist || !data.hasOwnProperty(savedBrowsePlaylist)) {
+            $("#music_list").val(playlist);
+            runWithPlayingSelectionSync(() => $("#music_list").trigger("change"));
+            localStorage.setItem("cur_playlist", playlist);
+          } else {
+            $("#music_list").val(savedBrowsePlaylist);
+            runWithPlayingSelectionSync(() => $("#music_list").trigger("change"));
+          }
         } else {
           // 使用本地记录的
           playlist = localStorage.getItem("cur_playlist");
           if (data.hasOwnProperty(playlist)) {
             $("#music_list").val(playlist);
-            $("#music_list").trigger("change");
+            runWithPlayingSelectionSync(() => $("#music_list").trigger("change"));
           }
         }
       });

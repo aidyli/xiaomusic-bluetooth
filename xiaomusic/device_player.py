@@ -564,6 +564,11 @@ class XiaoMusicDevice:
                 "play_list": copy.copy(self._play_list),
                 "pending_selection": copy.copy(self._pending_selection),
                 "pending_selection_count": self._pending_selection_count,
+                "is_playing": self.is_playing,
+                "start_time": self._start_time,
+                "duration": self._duration,
+                "paused_time": self._paused_time,
+                "play_session_id": self._play_session_id,
             }
         )
         return state
@@ -579,6 +584,11 @@ class XiaoMusicDevice:
         play_list = state.get("play_list")
         pending_selection = state.get("pending_selection")
         pending_selection_count = state.get("pending_selection_count")
+        shared_is_playing = state.get("is_playing")
+        shared_start_time = state.get("start_time")
+        shared_duration = state.get("duration")
+        shared_paused_time = state.get("paused_time")
+        shared_session_id = state.get("play_session_id")
         if cur_playlist:
             self.device.cur_playlist = cur_playlist
         if play_type:
@@ -590,6 +600,16 @@ class XiaoMusicDevice:
         if isinstance(pending_selection, list):
             self._pending_selection = copy.copy(pending_selection)
             self._pending_selection_count = pending_selection_count or len(pending_selection)
+        if isinstance(shared_is_playing, bool):
+            self.is_playing = shared_is_playing
+        if shared_start_time is not None:
+            self._start_time = shared_start_time
+        if shared_duration is not None:
+            self._duration = shared_duration
+        if shared_paused_time is not None:
+            self._paused_time = shared_paused_time
+        if shared_session_id is not None:
+            self._play_session_id = max(self._play_session_id, shared_session_id)
         return state
 
     def _sync_group_state_to_devices(self):
@@ -614,6 +634,9 @@ class XiaoMusicDevice:
         device_manager = self.xiaomusic.device_manager
         if device_manager is None:
             self._bump_play_session()
+            self.is_playing = False
+            self._start_time = 0
+            self._paused_time = 0
             await self.cancel_next_timer()
             await self._cancel_prefetch_timer()
             return self._play_session_id
@@ -621,6 +644,9 @@ class XiaoMusicDevice:
         self.log.info(f"invalidate_group_play_sessions {self.group_name} {list(devices.keys())}")
         for device in devices.values():
             device._bump_play_session()
+            device.is_playing = False
+            device._start_time = 0
+            device._paused_time = 0
             await device.cancel_next_timer()
             await device._cancel_prefetch_timer()
         # 返回当前设备的新 session，供本次播放设置 timer 时绑定。
@@ -729,17 +755,20 @@ class XiaoMusicDevice:
         self.is_playing = True
         self.device.cur_music = name
         self.device.playlist2music[self.device.cur_playlist] = name
+        # 先记录当前播放进度，再同步到组内其他设备；否则另一只音箱仍会保留旧
+        # start_time/duration/is_playing，Web 进度条继续按旧任务跑，旧会话也可能
+        # 在下一首定时器边界影响当前播放。
+        self._start_time = time.time()
+        self._paused_time = 0
+        self._duration = await self.xiaomusic.music_library.get_music_duration(
+            name, cur_playlist
+        )
         self._sync_group_state_to_devices()
         self.log.info(f"cur_music {self.get_cur_music()}")
         self.log.info(f"【{name}】已经开始播放了")
 
-        # 记录歌曲开始播放的时间
-        self._start_time = time.time()
-        self._paused_time = 0
-
         # 获取音频时长
-        sec = await self.xiaomusic.music_library.get_music_duration(name, cur_playlist)
-        self._duration = sec
+        sec = self._duration
         await self.xiaomusic.analytics.send_play_event(name, sec, self.hardware)
 
         is_radio = self.xiaomusic.music_library.is_web_radio_music(name)
@@ -1384,6 +1413,7 @@ class XiaoMusicDevice:
             self.log.warning(f"bluetooth_combo stop command exception: {e}")
             return None
 
+
     async def _run_bluetooth_combo_command(self, url, name):
         """通过配置的本地命令播放到蓝牙立体声组合。
 
@@ -1658,6 +1688,9 @@ class XiaoMusicDevice:
         """停止播放"""
         self._last_cmd = "stop"
         self.is_playing = False
+        self._start_time = 0
+        self._paused_time = 0
+        self._sync_group_state_to_devices()
         if arg1 != "notts":
             await self.do_tts(self.config.stop_tts_msg)
             await asyncio.sleep(3)  # 等它说完

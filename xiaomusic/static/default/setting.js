@@ -95,6 +95,75 @@ function fetchQRCode() {
 $(function () {
   $("#refresh-qrcode").on("click", fetchQRCode);
 
+  function renderBluetoothResult(data) {
+    const text = JSON.stringify(data, null, 2);
+    $("#bluetooth_scan_result").text(text);
+
+    const devices = [];
+    function addDevice(addr, name) {
+      if (!addr) return;
+      if (!devices.some((d) => d.addr === addr)) {
+        devices.push({ addr, name: name || addr });
+      }
+    }
+
+    const raw = JSON.stringify(data || {});
+    const deviceRegex = /Device\s+([0-9A-Fa-f:]{17})\s+([^\\n\"]*)/g;
+    let match;
+    while ((match = deviceRegex.exec(raw)) !== null) {
+      addDevice(match[1].toUpperCase(), (match[2] || "").trim());
+    }
+
+    if (Array.isArray(data.devices)) {
+      data.devices.forEach((dev) => addDevice(dev.address || dev.mac || dev.addr, dev.name || dev.alias));
+    }
+
+    const $select = $("#bluetooth_device_select");
+    if ($select.length && devices.length > 0) {
+      $select.empty();
+      devices.forEach((dev) => {
+        const label = dev.name && dev.name !== dev.addr ? `${dev.name} (${dev.addr})` : dev.addr;
+        $select.append($("<option>").val(dev.addr).text(label));
+      });
+    }
+  }
+
+  function callBluetoothApi(path, busyText, $btn) {
+    const oldText = $btn && $btn.length ? $btn.text() : "";
+    if ($btn && $btn.length) $btn.prop("disabled", true).text(busyText);
+    $("#bluetooth_scan_result").text(busyText);
+    const connector = path.indexOf("?") >= 0 ? "&" : "?";
+    const url = `${path}${connector}_=${Date.now()}`;
+    return $.ajax({ url: url, method: "GET", cache: false })
+      .done(renderBluetoothResult)
+      .fail(function (xhr) {
+        const msg = xhr.responseJSON ? JSON.stringify(xhr.responseJSON, null, 2) : xhr.responseText || xhr.statusText;
+        $("#bluetooth_scan_result").text("蓝牙请求失败：" + msg);
+      })
+      .always(function () {
+        if ($btn && $btn.length) $btn.prop("disabled", false).text(oldText);
+      });
+  }
+
+  $("#bluetooth_status_btn").on("click", function () {
+    callBluetoothApi("/api/bluetooth/status", "正在刷新蓝牙状态…", $(this));
+  });
+
+  $("#bluetooth_scan_btn").on("click", function () {
+    const seconds = Math.max(5, Math.min(180, parseInt($("#bluetooth_scan_seconds").val(), 10) || 90));
+    callBluetoothApi(`/api/bluetooth/scan?seconds=${seconds}&async=0`, `正在扫描蓝牙设备（${seconds} 秒），请确保目标设备处于可发现/配对模式…`, $(this));
+  });
+
+  $("#bluetooth_connect_btn").on("click", function () {
+    const address = $("#bluetooth_device_select").val() || "";
+    const query = address ? `?address=${encodeURIComponent(address)}&async=0` : "?async=0";
+    callBluetoothApi(`/api/bluetooth/connect${query}`, "正在连接蓝牙设备…", $(this));
+  });
+
+  $("#bluetooth_disconnect_btn").on("click", function () {
+    callBluetoothApi("/api/bluetooth/disconnect", "正在断开蓝牙设备…", $(this));
+  });
+
   // 拉取版本
   $.get("/getversion", function (data, status) {
     console.log(data, status, data["version"]);
