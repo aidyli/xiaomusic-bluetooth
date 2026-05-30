@@ -93,6 +93,7 @@ class MusicLibrary:
         # 标签管理
         self.all_music_tags = {}  # 音乐标签缓存
         self._tag_generation_task = False  # 标签生成任务标志
+        self._bulk_tag_generation = False  # 批量生成标签时延迟持久化，避免大曲库反复写缓存
         self._web_music_duration_cache = {}  # 网络音乐时长缓存（仅内存）
 
         # URL处理相关
@@ -962,8 +963,10 @@ class MusicLibrary:
                 if name not in self.all_music_tags:
                     self.all_music_tags[name] = asdict(Metadata())
                 self.all_music_tags[name]["duration"] = duration
-                # 保存缓存
-                self.try_save_tag_cache()
+                # 保存缓存。批量构建 tag cache 时由 _gen_all_music_tag 结束后统一保存，
+                # 避免大曲库每首歌 ffprobe 后都重写整个 JSON 文件。
+                if not getattr(self, "_bulk_tag_generation", False):
+                    self.try_save_tag_cache()
                 self.log.info(f"已缓存本地音乐 {name} 时长: {duration} 秒")
 
         except Exception as e:
@@ -1013,6 +1016,18 @@ class MusicLibrary:
                 self.log.info("加载：tag cache 未启用")
         except Exception as e:
             self.log.exception(f"Execption {e}")
+            # 缓存文件可能因为上次写入中断而为空/损坏；不要让坏缓存影响启动，备份后重建。
+            try:
+                if filename is not None and os.path.exists(filename):
+                    broken_filename = f"{filename}.broken"
+                    os.replace(filename, broken_filename)
+                    with open(filename, "w", encoding="utf-8") as f:
+                        json.dump({}, f, ensure_ascii=False, indent=2)
+                    self.log.warning(
+                        f"tag cache 文件损坏，已备份到【{broken_filename}】并重建空缓存"
+                    )
+            except Exception as backup_error:
+                self.log.exception(f"备份/重建损坏 tag cache 失败: {backup_error}")
 
         return tag_cache
 
@@ -1059,6 +1074,8 @@ class MusicLibrary:
             only_items: 仅更新指定的音乐项，None表示更新全部
         """
         self._tag_generation_task = True
+        previous_bulk_tag_generation = getattr(self, "_bulk_tag_generation", False)
+        self._bulk_tag_generation = True
         if only_items is None:
             only_items = self.all_music  # 默认更新全部
 
@@ -1086,14 +1103,9 @@ class MusicLibrary:
                 except BaseException as e:
                     self.log.exception(f"{e} {file_or_url} error {type(file_or_url)}!")
 
-            # 获取并缓存歌曲时长（仅本地音乐）
-            if name in all_music_tags and "duration" not in all_music_tags[name]:
-                try:
-                    duration = await self.get_music_duration(name)
-                    if duration > 0:
-                        all_music_tags[name]["duration"] = duration
-                except Exception as e:
-                    self.log.warning(f"获取歌曲 {name} 时长失败: {e}")
+            # 大曲库下不要在后台 tag 重建时为每首歌预读时长。
+            # 时长会在真实播放/查询单曲时通过 get_music_duration 按需读取并缓存；
+            # 否则启动后会对数万首歌连续 ffprobe，导致 CPU/IO 长时间被占用。
 
             if (time.perf_counter() - start) < 1:
                 await asyncio.sleep(0.001)
@@ -1103,6 +1115,7 @@ class MusicLibrary:
 
         # 全部更新结束后，一次性赋值
         self.all_music_tags = all_music_tags
+        self._bulk_tag_generation = previous_bulk_tag_generation
         # 刷新 tag cache
         self.try_save_tag_cache()
         self._tag_generation_task = False

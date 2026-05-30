@@ -42,6 +42,15 @@ function announceToScreenReader(message) {
   }
 }
 
+let pendingPlaybackCommand = null;
+let pendingPlaybackCommandDeadline = 0;
+let lastSyncedPlaybackKey = "";
+
+function markPendingPlaybackCommand(direction) {
+  pendingPlaybackCommand = direction;
+  pendingPlaybackCommandDeadline = Date.now() + 15000;
+}
+
 // 批量填充 select 选项（优化读屏性能）
 function fillSelectOptions(
   selectElement,
@@ -473,8 +482,8 @@ function prevTrack() {
     webPlayPrevious();
   } else {
     // 设备播放：发送命令
+    markPendingPlaybackCommand("prev");
     sendcmd("上一首");
-    show_now_player_music_name();
   }
 }
 
@@ -488,18 +497,70 @@ function nextTrack() {
     webPlayNext();
   } else {
     // 设备播放：发送命令
+    markPendingPlaybackCommand("next");
     sendcmd("下一首");
-
-    show_now_player_music_name();
   }
 }
 
+function shouldSyncPlayingSelection(curPlaylist, curMusic) {
+  const playbackKey = `${curPlaylist || ""}::${curMusic || ""}`;
+  if (!pendingPlaybackCommand) {
+    lastSyncedPlaybackKey = playbackKey;
+    return true;
+  }
+
+  if (Date.now() > pendingPlaybackCommandDeadline) {
+    pendingPlaybackCommand = null;
+    lastSyncedPlaybackKey = playbackKey;
+    return true;
+  }
+
+  // 点击上一首/下一首后，后端命令是异步执行的。WebSocket 可能先推送一帧旧状态，
+  // 这时如果立即同步 UI，就会看到“刷新成上一首/旧列表”。等待播放状态 key 改变后再同步。
+  if (playbackKey && playbackKey !== lastSyncedPlaybackKey) {
+    pendingPlaybackCommand = null;
+    lastSyncedPlaybackKey = playbackKey;
+    return true;
+  }
+
+  return false;
+}
+
 //获取当前正在播放的歌曲显示到歌曲选择列表
+function syncPlayingSelection(curPlaylist, curMusic) {
+  if (!curMusic) return;
+  if (!shouldSyncPlayingSelection(curPlaylist, curMusic)) return;
+  // 先写 localStorage，#music_list change 回填歌曲列表时会读取 cur_music 作为默认选中项。
+  localStorage.setItem("cur_music", curMusic);
+  if (curPlaylist) {
+    localStorage.setItem("cur_playlist", curPlaylist);
+  }
+
+  const $musicList = $("#music_list");
+  const $musicName = $("#music_name");
+
+  if (curPlaylist && $musicList.length && $musicList.val() !== curPlaylist) {
+    if ($musicList.find(`option[value="${$.escapeSelector(curPlaylist)}"]`).length > 0) {
+      $musicList.val(curPlaylist);
+      // 切换歌单会重建 #music_name，且会根据 localStorage.cur_music 选中当前歌曲。
+      $musicList.trigger("change");
+    }
+  }
+
+  if ($musicName.length) {
+    if ($musicName.find(`option[value="${$.escapeSelector(curMusic)}"]`).length > 0) {
+      $musicName.val(curMusic);
+    }
+  }
+}
+
 function show_now_player_music_name(){
       setTimeout(() => {
       let now_player_music_name = $("#playering-music").text();
-      now_player_music_name = now_player_music_name.replace("【播放中】 ","")
-      $("#music_name").val(now_player_music_name);
+      now_player_music_name = now_player_music_name.replace("【播放中】 ","").replace("【空闲中】 ","")
+  // 直接通过当前 DOM 文本兜底同步时不要套用上一首/下一首的 pending 保护。
+  pendingPlaybackCommand = null;
+  syncPlayingSelection(localStorage.getItem("cur_playlist"), now_player_music_name);
     }, 1000);
 }
 
@@ -1649,6 +1710,7 @@ function startWebSocket(did, token) {
       }
 
       localStorage.setItem("cur_music", cur_music);
+      syncPlayingSelection(data.cur_playlist || localStorage.getItem("cur_playlist"), cur_music);
       updateProgressUI();
     };
 

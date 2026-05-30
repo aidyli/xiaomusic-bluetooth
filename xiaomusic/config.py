@@ -195,6 +195,30 @@ class Config:
     group_list: str = os.getenv(
         "XIAOMUSIC_GROUP_LIST", ""
     )  # did1:group_name,did2:group_name
+    # 实验功能：仅在配置了设备组且播放本地 /music/ 文件时，给两只音箱分别播放左/右声道分轨缓存。
+    stereo_split_enabled: bool = (
+        os.getenv("XIAOMUSIC_STEREO_SPLIT_ENABLED", "false").lower() == "true"
+    )
+    stereo_split_left_did: str = os.getenv("XIAOMUSIC_STEREO_SPLIT_LEFT_DID", "")
+    stereo_split_right_did: str = os.getenv("XIAOMUSIC_STEREO_SPLIT_RIGHT_DID", "")
+    stereo_split_cache_dir: str = os.getenv(
+        "XIAOMUSIC_STEREO_SPLIT_CACHE_DIR", "stereo_split"
+    )
+    # 左右分轨缓存最大占用，0 表示不自动清理。
+    stereo_split_cache_max_mb: int = int(
+        os.getenv("XIAOMUSIC_STEREO_SPLIT_CACHE_MAX_MB", "2048")
+    )
+    # 蓝牙立体声组合输出：把同组播放改为本地命令输出到宿主机蓝牙音频 sink。
+    bluetooth_combo_enabled: bool = (
+        os.getenv("XIAOMUSIC_BLUETOOTH_COMBO_ENABLED", "false").lower() == "true"
+    )
+    bluetooth_combo_command: str = os.getenv("XIAOMUSIC_BLUETOOTH_COMBO_COMMAND", "")
+    bluetooth_combo_stop_command: str = os.getenv(
+        "XIAOMUSIC_BLUETOOTH_COMBO_STOP_COMMAND", ""
+    )
+    bluetooth_combo_timeout_sec: int = int(
+        os.getenv("XIAOMUSIC_BLUETOOTH_COMBO_TIMEOUT_SEC", "5")
+    )
     remove_id3tag: bool = (
         os.getenv("XIAOMUSIC_REMOVE_ID3TAG", "false").lower() == "true"
     )

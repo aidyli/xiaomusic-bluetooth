@@ -157,6 +157,8 @@
                 <button type="button" class="config-tab-button" data-tab="playback" role="tab" aria-selected="false" aria-controls="tab-playback">播放控制</button>
                 <button type="button" class="config-tab-button" data-tab="search" role="tab" aria-selected="false" aria-controls="tab-search">搜索匹配</button>
                 <button type="button" class="config-tab-button" data-tab="audio" role="tab" aria-selected="false" aria-controls="tab-audio">音频处理</button>
+                <button type="button" class="config-tab-button" data-tab="bluetooth" role="tab" aria-selected="false" aria-controls="tab-bluetooth">蓝牙播放</button>
+                <button type="button" class="config-tab-button" data-tab="stereo" role="tab" aria-selected="false" aria-controls="tab-stereo">左右分轨</button>
                 <button type="button" class="config-tab-button" data-tab="tts" role="tab" aria-selected="false" aria-controls="tab-tts">语音TTS</button>
                 <button type="button" class="config-tab-button" data-tab="voicecmd" role="tab" aria-selected="false" aria-controls="tab-voicecmd">语音命令</button>
                 <button type="button" class="config-tab-button" data-tab="network" role="tab" aria-selected="false" aria-controls="tab-network">网络下载</button>
@@ -315,6 +317,59 @@
                             <option value="true">true</option>
                             <option value="false" selected>false</option>
                         </select>
+                    </div>
+                    </div>
+                </div>
+
+                <div class="config-tab-content setting-panel" id="tab-bluetooth" role="tabpanel">
+                    <div class="card-content">
+                    <div class="rows">
+                        <label for="bluetooth_combo_enabled">播放输出方式:</label>
+                        <select id="bluetooth_combo_enabled">
+                            <option value="false" selected>原方式：小爱/Mina 播放</option>
+                            <option value="true">蓝牙：宿主机蓝牙立体声组合</option>
+                        </select>
+
+                        <label for="bluetooth_combo_command">蓝牙播放命令模板:</label>
+                        <input id="bluetooth_combo_command" type="text" value="/host-scripts/play-xiaomi-bt.sh {url}" />
+
+                        <label for="bluetooth_combo_stop_command">蓝牙停止旧播放命令:</label>
+                        <input id="bluetooth_combo_stop_command" type="text" value="/host-scripts/stop-xiaomi-bt.sh" />
+
+                        <label for="bluetooth_combo_timeout_sec">蓝牙命令等待秒数:</label>
+                        <input id="bluetooth_combo_timeout_sec" type="number" value="8" min="1" />
+
+                        <div class="login-tips">
+                            开启后，同组播放会优先把一路音频输出到宿主机蓝牙 sink，由“小爱立体声组合”固件负责左右同步；关闭后恢复原来的小爱/Mina 组播或左右分轨逻辑。命令模板支持 {url} 和 {name}，保存配置后会重新初始化。
+                        </div>
+                    </div>
+                    </div>
+                </div>
+
+                <div class="config-tab-content setting-panel" id="tab-stereo" role="tabpanel">
+                    <div class="card-content">
+                    <div class="rows">
+                        <label for="stereo_split_enabled">启用设备组左右分轨:</label>
+                        <select id="stereo_split_enabled">
+                            <option value="true">开启</option>
+                            <option value="false" selected>关闭</option>
+                        </select>
+
+                        <label for="stereo_split_left_did">左声道设备 DID:</label>
+                        <input id="stereo_split_left_did" type="text" placeholder="例如 841348478" />
+
+                        <label for="stereo_split_right_did">右声道设备 DID:</label>
+                        <input id="stereo_split_right_did" type="text" placeholder="例如 772350382" />
+
+                        <label for="stereo_split_cache_dir">分轨缓存目录名:</label>
+                        <input id="stereo_split_cache_dir" type="text" value="stereo_split" />
+
+                        <label for="stereo_split_cache_max_mb">分轨缓存上限 MB:</label>
+                        <input id="stereo_split_cache_max_mb" type="number" value="2048" min="0" />
+
+                        <div class="login-tips">
+                            实验功能：仅在配置了设备组 group_list、且播放本地 /music/ 文件时启用；在线音乐、TTS、单设备播放不受影响。0 MB 表示不自动清理缓存。
+                        </div>
                     </div>
                     </div>
                 </div>

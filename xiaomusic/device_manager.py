@@ -37,6 +37,7 @@ class DeviceManager:
         self.devices: dict[str, XiaoMusicDevice] = {}
         self.device_id_did = {}  # device_id 到 did 的映射
         self.groups = {}  # 设备分组，key 为组名，value 为 device_id 列表
+        self.group_play_states = {}  # 组播放共享状态，key 为组名，value 为播放状态快照
 
     def _update_devices(self):
         """更新设备列表
@@ -129,6 +130,16 @@ class DeviceManager:
             if did and did in self.devices:
                 devices[did] = self.devices[did]
         return devices
+
+    def get_group_play_state(self, group_name):
+        """获取同组共享播放状态，避免同组音箱各自维护播放任务导致语音入口不一致。"""
+        return self.group_play_states.setdefault(group_name, {})
+
+    def update_group_play_state(self, group_name, **kwargs):
+        """更新同组共享播放状态。"""
+        state = self.get_group_play_state(group_name)
+        state.update(kwargs)
+        return state
 
     async def update_device_info(self, auth_manager):
         """更新设备信息并刷新设备列表

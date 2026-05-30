@@ -243,6 +243,40 @@
         </section>
 
         <!-- 播放控制部分 -->
+        <section id="stereo_split" class="setting-section bg-white rounded-lg shadow">
+          <div class="p-4 sm:p-6">
+            <h2 class="text-lg font-medium text-gray-900 mb-4">本地音乐左右分轨</h2>
+            <p class="text-sm text-gray-500 mb-4">实验功能：仅在配置了设备组 group_list、且播放本地 /music/ 文件时启用；在线音乐、TTS、单设备播放不受影响。</p>
+            <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+              <div class="mb-4">
+                <label for="stereo_split_enabled" class="block text-sm font-medium text-gray-700">启用设备组左右分轨</label>
+                <select id="stereo_split_enabled" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-4 py-2.5 text-gray-900 placeholder:text-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 hover:border-gray-400 bg-white py-2 px-3 text-gray-900 cursor-pointer hover:bg-gray-50">
+                  <option value="true">开启</option>
+                  <option value="false" selected>关闭</option>
+                </select>
+              </div>
+              <div class="mb-4">
+                <label for="stereo_split_left_did" class="block text-sm font-medium text-gray-700">左声道设备 DID</label>
+                <input id="stereo_split_left_did" type="text" placeholder="例如 841348478" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-4 py-2.5 text-gray-900 placeholder:text-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 hover:border-gray-400" />
+              </div>
+              <div class="mb-4">
+                <label for="stereo_split_right_did" class="block text-sm font-medium text-gray-700">右声道设备 DID</label>
+                <input id="stereo_split_right_did" type="text" placeholder="例如 772350382" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-4 py-2.5 text-gray-900 placeholder:text-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 hover:border-gray-400" />
+              </div>
+              <div class="mb-4">
+                <label for="stereo_split_cache_dir" class="block text-sm font-medium text-gray-700">分轨缓存目录名</label>
+                <input id="stereo_split_cache_dir" type="text" value="stereo_split" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-4 py-2.5 text-gray-900 placeholder:text-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 hover:border-gray-400" />
+              </div>
+              <div class="mb-4">
+                <label for="stereo_split_cache_max_mb" class="block text-sm font-medium text-gray-700">分轨缓存上限 MB</label>
+                <input id="stereo_split_cache_max_mb" type="number" value="2048" min="0" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-4 py-2.5 text-gray-900 placeholder:text-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 hover:border-gray-400" />
+                <p class="text-xs text-gray-500 mt-1">0 表示不自动清理；超过上限时按最久未使用清理。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 播放控制部分 -->
         <section id="playback" class="setting-section bg-white rounded-lg shadow">
           <div class="p-4 sm:p-6">
             <h2 class="text-lg font-medium text-gray-900 mb-4">播放控制</h2>
