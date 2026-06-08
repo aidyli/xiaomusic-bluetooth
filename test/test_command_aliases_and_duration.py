@@ -74,7 +74,9 @@ def test_update_config_blank_hostname_keeps_valid_public_base(monkeypatch):
 def test_ffprobe_non_json_failure_does_not_log_json_decode_noise(monkeypatch, caplog):
     from xiaomusic.utils import music_utils
 
-    monkeypatch.setattr(music_utils.subprocess, "run", lambda *_args, **_kwargs: DummyCompletedProcess())
+    monkeypatch.setattr(
+        music_utils.subprocess, "run", lambda *_args, **_kwargs: DummyCompletedProcess()
+    )
 
     with caplog.at_level(logging.WARNING):
         duration = get_duration_by_ffprobe("broken.wav", "/usr/bin")

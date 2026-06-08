@@ -53,13 +53,17 @@ async def bluetooth_scan(
     pairing mode before scanning. async=true starts the scan in the sidecar and
     returns immediately; otherwise this request waits for scan completion.
     """
-    query = urllib.parse.urlencode({"seconds": seconds, "async": "1" if async_scan else "0"})
+    query = urllib.parse.urlencode(
+        {"seconds": seconds, "async": "1" if async_scan else "0"}
+    )
     return _call_sidecar(f"/scan?{query}", timeout=seconds + 20)
 
 
 @router.get("/api/bluetooth/connect")
 async def bluetooth_connect(
-    address: str = Query("", description="Bluetooth MAC address; empty uses sidecar default target"),
+    address: str = Query(
+        "", description="Bluetooth MAC address; empty uses sidecar default target"
+    ),
     async_connect: bool = Query(False, alias="async"),
 ):
     """Connect sidecar to a scanned/trusted Bluetooth audio sink."""

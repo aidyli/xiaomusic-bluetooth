@@ -442,13 +442,17 @@ class XiaoMusicDevice:
         # 下一首定时器可能已经醒来并通过了第一次 session 检查，但在真正
         # 切歌前，另一只同组音箱又接管了播放。这里必须再次校验，避免
         # 旧音箱 A 的 timer 在音箱 B 已播放新歌后继续强行切歌。
-        if expected_session_id is not None and not self._is_current_session(expected_session_id):
+        if expected_session_id is not None and not self._is_current_session(
+            expected_session_id
+        ):
             self.log.info(
                 f"下一曲请求已过期，跳过 did:{self.did} session:{expected_session_id} current:{self._play_session_id}"
             )
             return
         self._apply_group_state_to_device()
-        if expected_session_id is not None and not self._is_current_session(expected_session_id):
+        if expected_session_id is not None and not self._is_current_session(
+            expected_session_id
+        ):
             self.log.info(
                 f"下一曲请求同步后已过期，跳过 did:{self.did} session:{expected_session_id} current:{self._play_session_id}"
             )
@@ -466,7 +470,9 @@ class XiaoMusicDevice:
         ):
             name = self.get_next_music()
             self.log.info(f"get_next_music {name}")
-        if expected_session_id is not None and not self._is_current_session(expected_session_id):
+        if expected_session_id is not None and not self._is_current_session(
+            expected_session_id
+        ):
             self.log.info(
                 f"下一曲请求播放前已过期，跳过 did:{self.did} session:{expected_session_id} current:{self._play_session_id}"
             )
@@ -543,7 +549,9 @@ class XiaoMusicDevice:
                 self.log.error(f"预加载下一首歌曲失败: {e}")
 
         self._prefetch_timer = asyncio.create_task(_do_prefetch())
-        self.log.info(f"{sleep_sec} 秒后预缓存下一首歌曲 did:{self.did} session:{session_id}")
+        self.log.info(
+            f"{sleep_sec} 秒后预缓存下一首歌曲 did:{self.did} session:{session_id}"
+        )
 
     async def _cancel_prefetch_timer(self):
         """取消预缓存下一首任务。"""
@@ -617,7 +625,9 @@ class XiaoMusicDevice:
             self._play_list = copy.copy(play_list)
         if isinstance(pending_selection, list):
             self._pending_selection = copy.copy(pending_selection)
-            self._pending_selection_count = pending_selection_count or len(pending_selection)
+            self._pending_selection_count = pending_selection_count or len(
+                pending_selection
+            )
         if isinstance(shared_is_playing, bool):
             self.is_playing = shared_is_playing
         if shared_start_time is not None:
@@ -1204,7 +1214,9 @@ class XiaoMusicDevice:
     def _get_stereo_split_roles(self, device_id_list):
         """返回 {device_id: 'left'|'right'}。未配置左右 did 时，按组内顺序默认第一只左、第二只右。"""
         device_manager = self.xiaomusic.device_manager
-        device_id_to_did = {device_id: device_manager.get_did(device_id) for device_id in device_id_list}
+        device_id_to_did = {
+            device_id: device_manager.get_did(device_id) for device_id in device_id_list
+        }
         left_did = (self.config.stereo_split_left_did or "").strip()
         right_did = (self.config.stereo_split_right_did or "").strip()
 
@@ -1248,7 +1260,9 @@ class XiaoMusicDevice:
                 if total <= limit:
                     break
             except Exception as e:
-                self.log.warning(f"stereo_split cache cleanup failed file:{p} error:{e}")
+                self.log.warning(
+                    f"stereo_split cache cleanup failed file:{p} error:{e}"
+                )
         if removed:
             self.log.info(
                 f"stereo_split cache cleanup removed:{len(removed)} total_left_mb:{total / 1024 / 1024:.1f} limit_mb:{max_mb}"
@@ -1258,16 +1272,23 @@ class XiaoMusicDevice:
         """生成并缓存左右声道文件，返回 {'left': url, 'right': url}。"""
         stat = local_path.stat()
         cache_key = hashlib.sha1(
-            f"{local_path}|{stat.st_size}|{stat.st_mtime_ns}".encode("utf-8")
+            f"{local_path}|{stat.st_size}|{stat.st_mtime_ns}".encode()
         ).hexdigest()[:24]
-        cache_root_name = (self.config.stereo_split_cache_dir or "stereo_split").strip("/")
+        cache_root_name = (self.config.stereo_split_cache_dir or "stereo_split").strip(
+            "/"
+        )
         temp_base = Path(self.config.temp_path).resolve()
         cache_dir = (temp_base / cache_root_name).resolve()
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         left_path = cache_dir / f"{cache_key}.left.mp3"
         right_path = cache_dir / f"{cache_key}.right.mp3"
-        if left_path.exists() and right_path.exists() and left_path.stat().st_size > 0 and right_path.stat().st_size > 0:
+        if (
+            left_path.exists()
+            and right_path.exists()
+            and left_path.stat().st_size > 0
+            and right_path.stat().st_size > 0
+        ):
             self.log.info(f"stereo_split cache hit file:{local_path}")
         else:
             ffmpeg = shutil.which("ffmpeg")
@@ -1362,12 +1383,16 @@ class XiaoMusicDevice:
             if not local_path:
                 return
             split_urls = await self._ensure_stereo_split_files(local_path)
-            await asyncio.gather(*(self._prewarm_play_url(u) for u in split_urls.values()))
+            await asyncio.gather(
+                *(self._prewarm_play_url(u) for u in split_urls.values())
+            )
             self.log.info(
                 f"stereo_split prefetch completed music:{music_name} urls:{split_urls}"
             )
         except Exception as e:
-            self.log.warning(f"stereo_split prefetch failed music:{music_name} error:{e}")
+            self.log.warning(
+                f"stereo_split prefetch failed music:{music_name} error:{e}"
+            )
 
     async def _try_group_stereo_split_play(self, url, name, device_id_list):
         """实验性本地音乐左右分轨：仅对启用配置、同组两设备、本地音乐 URL 生效。"""
@@ -1393,7 +1418,9 @@ class XiaoMusicDevice:
             # 方案 C：分轨已准备好后，再统一停止两只音箱，短暂等待固件状态落稳，随后预热并并发下发。
             await self.group_force_stop_xiaoai()
             await asyncio.sleep(self._stereo_split_stop_settle_sec)
-            await asyncio.gather(*(self._prewarm_play_url(u) for u in split_urls.values()))
+            await asyncio.gather(
+                *(self._prewarm_play_url(u) for u in split_urls.values())
+            )
             tasks = [
                 self.play_one_url(device_id, split_urls[roles[device_id]], name)
                 for device_id in device_id_list
@@ -1404,7 +1431,9 @@ class XiaoMusicDevice:
             )
             return results
         except Exception as e:
-            self.log.exception(f"stereo_split failed, fallback to normal group play: {e}")
+            self.log.exception(
+                f"stereo_split failed, fallback to normal group play: {e}"
+            )
             return None
 
     async def _run_bluetooth_combo_stop_command(self):
@@ -1438,7 +1467,6 @@ class XiaoMusicDevice:
         except Exception as e:
             self.log.warning(f"bluetooth_combo stop command exception: {e}")
             return None
-
 
     async def _run_bluetooth_combo_command(self, url, name):
         """通过配置的本地命令播放到蓝牙立体声组合。
@@ -1498,7 +1526,9 @@ class XiaoMusicDevice:
         if bluetooth_result is not None:
             return bluetooth_result
 
-        stereo_results = await self._try_group_stereo_split_play(url, name, device_id_list)
+        stereo_results = await self._try_group_stereo_split_play(
+            url, name, device_id_list
+        )
         if stereo_results is not None:
             return stereo_results
 
@@ -1640,7 +1670,9 @@ class XiaoMusicDevice:
                 self.log.error(f"Execption {e}")
 
         self._next_timer = asyncio.create_task(_do_next())
-        self.log.info(f"{sec} 秒后将会播放下一首歌曲 did: {self.did} session:{session_id}")
+        self.log.info(
+            f"{sec} 秒后将会播放下一首歌曲 did: {self.did} session:{session_id}"
+        )
 
     async def set_volume(self, volume: int):
         """设置音量"""
@@ -1730,7 +1762,11 @@ class XiaoMusicDevice:
         """强制停止播放作用域内所有设备。"""
         devices = self._get_playback_scope_devices()
         device_id_list = [device.device_id for device in devices.values()]
-        scope_name = "all_devices" if getattr(self.config, "bluetooth_combo_enabled", False) else self.group_name
+        scope_name = (
+            "all_devices"
+            if getattr(self.config, "bluetooth_combo_enabled", False)
+            else self.group_name
+        )
         self.log.info(f"group_force_stop_xiaoai scope:{scope_name} {device_id_list}")
         tasks = [self.force_stop_xiaoai(device_id) for device_id in device_id_list]
         results = await asyncio.gather(*tasks)

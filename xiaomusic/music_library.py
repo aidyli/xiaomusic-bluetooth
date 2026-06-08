@@ -93,7 +93,9 @@ class MusicLibrary:
         # 标签管理
         self.all_music_tags = {}  # 音乐标签缓存
         self._tag_generation_task = False  # 标签生成任务标志
-        self._bulk_tag_generation = False  # 批量生成标签时延迟持久化，避免大曲库反复写缓存
+        self._bulk_tag_generation = (
+            False  # 批量生成标签时延迟持久化，避免大曲库反复写缓存
+        )
         self._web_music_duration_cache = {}  # 网络音乐时长缓存（仅内存）
 
         # URL处理相关
@@ -1328,7 +1330,9 @@ class MusicLibrary:
             proxy_type = "radio" if is_radio else "music"
             token = secrets.token_urlsafe(8)
             set_proxy_token(token, origin_url, bool(is_radio))
-            proxy_url = f"{self.config.get_public_base_url()}/proxy/{proxy_type}?token={token}"
+            proxy_url = (
+                f"{self.config.get_public_base_url()}/proxy/{proxy_type}?token={token}"
+            )
             self.log.info(f"Using token proxy url: {proxy_url}")
             return proxy_url
         except Exception as e:

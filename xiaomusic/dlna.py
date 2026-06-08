@@ -96,7 +96,9 @@ def _extract_services(root: ET.Element, location: str) -> list[dict[str, str]]:
                 "service_type": service_type,
                 "service_id": service_info.get("serviceId", ""),
                 "control_url": _join_url(location, control_url),
-                "event_sub_url": _join_url(location, service_info.get("eventSubURL", "")),
+                "event_sub_url": _join_url(
+                    location, service_info.get("eventSubURL", "")
+                ),
                 "scpd_url": _join_url(location, service_info.get("SCPDURL", "")),
             }
         )
@@ -203,7 +205,9 @@ async def discover_dlna_renderers(
             if remaining <= 0:
                 break
             try:
-                data, addr = await asyncio.wait_for(loop.sock_recvfrom(sock, 65535), remaining)
+                data, addr = await asyncio.wait_for(
+                    loop.sock_recvfrom(sock, 65535), remaining
+                )
             except TimeoutError:
                 break
             headers = _parse_ssdp_response(data)
@@ -231,5 +235,7 @@ async def discover_dlna_renderers(
     for renderer in enriched:
         if include_all or _looks_like_renderer(renderer.raw_headers, renderer):
             result.append(renderer.to_dict())
-    result.sort(key=lambda item: (item.get("friendly_name") or item.get("location") or ""))
+    result.sort(
+        key=lambda item: item.get("friendly_name") or item.get("location") or ""
+    )
     return result
