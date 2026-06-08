@@ -1,0 +1,16 @@
+[Unit]
+Description=Container PulseAudio for Bluetooth sidecar
+After=dbus.service bluetooth.service bt-prep.service
+Wants=dbus.service bluetooth.service
+
+[Service]
+Type=simple
+ExecStartPre=/bin/mkdir -p /run/pulse
+ExecStartPre=/bin/chmod 777 /run/pulse
+ExecStart=/usr/bin/pulseaudio --system --disallow-exit --exit-idle-time=-1 --log-level=info --log-target=journal
+Restart=on-failure
+Environment=PULSE_RUNTIME_PATH=/run/pulse
+Environment=PULSE_SERVER=unix:/run/pulse/native
+
+[Install]
+WantedBy=multi-user.target

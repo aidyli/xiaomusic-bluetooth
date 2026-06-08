@@ -1,0 +1,13 @@
+[Unit]
+Description=Prepare Bluetooth adapter in container
+DefaultDependencies=no
+Before=bluetooth.service
+After=dbus.service systemd-udevd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -lc 'mkdir -p /run/pulse /var/lib/bluetooth; chmod 777 /run/pulse; rfkill unblock bluetooth || true; btmgmt power off || true; sleep 1; btmgmt power on || true; btmgmt bredr on || true; btmgmt le on || true; hciconfig hci0 down || true; sleep 1; hciconfig hci0 up || true'
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=Bluetooth Sidecar HTTP Bridge
+After=bluetooth.service bt-pulseaudio.service
+Wants=bluetooth.service bt-pulseaudio.service
+
+[Service]
+Type=simple
+Environment=BT_TARGET_MAC=44:F7:70:81:9C:C4
+Environment=BT_BRIDGE_PORT=58091
+Environment=PULSE_SERVER=unix:/run/pulse/native
+ExecStart=/usr/bin/python3 /usr/local/bin/sidecar-server.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

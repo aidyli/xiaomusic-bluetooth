@@ -361,22 +361,27 @@ wget -qO- --timeout=20 "$BASE/disconnect"
 
 ### 构建目录
 
-建议构建目录：
+sidecar 构建上下文已经随本仓库一起提交，路径为：
 
 ```text
-/volume2/docker/Docker/xiaomiai/bt-sidecar-systemd
+docker/bluetooth-sidecar-systemd/
 ```
 
-至少包含：
+目录内容：
 
 ```text
-Dockerfile
-sidecar-server.py
-pulse-system.pa
-bt-prep.service
-bt-pulseaudio.service
-bt-sidecar-bridge.service
+docker/bluetooth-sidecar-systemd/
+├── Dockerfile
+├── README.md
+├── sidecar-server.py
+├── pulse-system.pa
+├── bt-prep.service
+├── bt-pulseaudio.service
+├── bt-sidecar-bridge.service
+└── docker-compose.yaml
 ```
+
+其中 `docker-compose.yaml` 是 sidecar 单独调试/参考用例，生产部署仍建议使用上文的双容器 compose。
 
 ### Dockerfile 核心内容
 
@@ -413,8 +418,9 @@ CMD ["/sbin/init"]
 ### 构建 sidecar 镜像
 
 ```bash
-cd /volume2/docker/Docker/xiaomiai/bt-sidecar-systemd
-docker build -t registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:bluetooth-sidecar-systemd .
+# 从仓库根目录执行
+docker build -t registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:bluetooth-sidecar-systemd \
+  docker/bluetooth-sidecar-systemd
 ```
 
 如需从本地 tag 转成阿里云镜像仓库 tag：
