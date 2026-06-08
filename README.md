@@ -22,12 +22,14 @@
 ```text
 小爱音箱 / Web 页面
   -> XiaoMusic 容器
-  -> /app/bin/call-xiaomi-bt-sidecar.sh {url}
+  -> Python 直接调用 bt-audio-sidecar HTTP API
   -> 127.0.0.1:58091 bt-audio-sidecar HTTP bridge
   -> sidecar 内 systemd + D-Bus + BlueZ + PulseAudio + mpv
   -> USB 蓝牙适配器
   -> 蓝牙立体声组合
 ```
+
+V3 仍保留 legacy command fallback，但推荐配置下不再依赖 `/app/bin/*.sh` 作为默认播放路径。
 
 ## 当前镜像
 
@@ -56,7 +58,16 @@ XIAOMUSIC_BLUETOOTH_SIDECAR_BASE=http://127.0.0.1:58091
 XIAOMUSIC_BLUETOOTH_SIDECAR_TIMEOUT_SEC=20
 ```
 
-播放时 XiaoMusic 会调用 sidecar 播放脚本，把音频 URL 转交给 `bt-audio-sidecar`。停止播放时会调用 stop 脚本，停止 sidecar 内的 `mpv`。
+播放时 XiaoMusic 会优先直接调用 `bluetooth_sidecar_base` 指向的 HTTP sidecar，将音频 URL 转交给 `bt-audio-sidecar`。停止播放时会直接调用 sidecar `/stop`，停止 sidecar 内的 `mpv`。
+
+V3 推荐让 legacy 命令模板保持为空：
+
+```text
+bluetooth_combo_command=""
+bluetooth_combo_stop_command=""
+```
+
+这样设置页保存后也不会回到旧脚本路径。仅在 `bluetooth_sidecar_base` 为空或 HTTP 调用不可用时，才需要考虑旧脚本 fallback。
 
 ### 2. 同组设备共享播放状态
 
@@ -511,6 +522,13 @@ gunzip -c xiaomusic-bluetooth-sidecar-systemd.tar.gz | docker load
 docker build -t registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v3 .
 ```
 
+如果旧 Docker builder 不支持 BuildKit/TARGETPLATFORM 变量扩展，或需要明确构建 linux/amd64，可使用仓库内的 `Dockerfile.v3-amd64`：
+
+```bash
+docker build -f Dockerfile.v3-amd64 \
+  -t registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v3 .
+```
+
 如需从本地蓝牙修复 tag 转成阿里云镜像仓库 tag：
 
 ```bash
@@ -695,11 +713,14 @@ bluez_sink.44_F7_70_81_9C_C4.a2dp_sink
 ```json
 {
   "bluetooth_combo_enabled": "true",
-  "bluetooth_combo_command": "/app/bin/call-xiaomi-bt-sidecar.sh {url}",
-  "bluetooth_combo_stop_command": "/app/bin/stop-xiaomi-bt-sidecar.sh",
-  "bluetooth_combo_timeout_sec": 20
+  "bluetooth_sidecar_base": "http://127.0.0.1:58091",
+  "bluetooth_sidecar_timeout_sec": 20,
+  "bluetooth_combo_command": "",
+  "bluetooth_combo_stop_command": ""
 }
 ```
+
+V3 推荐留空 `bluetooth_combo_command` 和 `bluetooth_combo_stop_command`，由 Python 代码直接调用 sidecar HTTP API；旧脚本路径只作为 fallback/兼容方案。
 
 如果语音插件需要通过自定义口令执行，还要确认 `active_cmd` 中包含对应 `exec#...` 项。
 

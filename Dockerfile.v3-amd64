@@ -1,0 +1,66 @@
+# Single-platform linux/amd64 Dockerfile for legacy Docker builder.
+# Equivalent to the default alpine amd64 path in Dockerfile, but avoids BuildKit-only
+# BUILDPLATFORM/TARGETPLATFORM variable expansion.
+ARG PYTHON_VERSION=3.14
+
+FROM python:${PYTHON_VERSION}-alpine AS builder
+
+RUN apk add --no-cache \
+    build-base \
+    nodejs \
+    npm \
+    zlib-dev \
+    jpeg-dev \
+    freetype-dev \
+    lcms2-dev \
+    openjpeg-dev \
+    tiff-dev \
+    libwebp-dev
+
+RUN pip install -U pdm
+ENV PDM_CHECK_UPDATE=false
+
+WORKDIR /app
+COPY pyproject.toml README.md package.json ./
+RUN pdm install --prod --no-editable -v
+RUN npm install --loglevel=verbose
+
+COPY xiaomusic/ ./xiaomusic/
+COPY plugins/ ./plugins/
+COPY holiday/ ./holiday/
+COPY xiaomusic.py .
+
+FROM python:${PYTHON_VERSION}-alpine AS runner
+
+RUN apk add --no-cache \
+    ffmpeg \
+    nodejs \
+    npm
+
+WORKDIR /app
+COPY --from=builder /app/.venv ./.venv
+COPY --from=builder /app/node_modules ./node_modules/
+COPY --from=builder /app/xiaomusic/ ./xiaomusic/
+COPY --from=builder /app/plugins/ ./plugins/
+COPY --from=builder /app/holiday/ ./holiday/
+COPY --from=builder /app/xiaomusic.py .
+COPY --from=builder /app/xiaomusic/__init__.py /base_version.py
+COPY --from=builder /app/package.json .
+
+COPY docker/xiaomusic-bluetooth-scripts/*.sh /app/bin/
+RUN chmod +x /app/bin/*.sh
+
+RUN mkdir -p /app/ffmpeg/bin \
+    && ln -s $(which ffmpeg) /app/ffmpeg/bin/ffmpeg \
+    && ln -s $(which ffprobe) /app/ffmpeg/bin/ffprobe
+
+RUN touch /app/.dockerenv
+
+VOLUME /app/conf
+VOLUME /app/music
+EXPOSE 8090
+
+ENV TZ=Asia/Shanghai
+ENV PATH=/app/.venv/bin:/usr/local/bin:$PATH
+
+CMD ["/app/.venv/bin/python3", "/app/xiaomusic.py"]
