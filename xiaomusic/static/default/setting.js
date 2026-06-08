@@ -164,12 +164,6 @@ $(function () {
     callBluetoothApi("/api/bluetooth/disconnect", "正在断开蓝牙设备…", $(this));
   });
 
-  // 拉取版本
-  $.get("/getversion", function (data, status) {
-    console.log(data, status, data["version"]);
-    $("#version").text(`${data.version}`);
-  });
-
   // 遍历所有的select元素，默认选中只有1个选项的
   const autoSelectOne = () => {
     $("select").each(function () {

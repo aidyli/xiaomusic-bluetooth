@@ -1070,23 +1070,6 @@ function compareVersion(version1, version2) {
   return 0;
 }
 
-// 拉取版本
-$.get("/getversion", function (data, status) {
-  console.log(data, status, data["version"]);
-  $("#version").text(`${data.version}`);
-
-  $.get("/latestversion", function (ret, status) {
-    console.log(ret, status);
-    if (ret.ret == "OK") {
-      const result = compareVersion(ret.version, data.version);
-      if (result > 0) {
-        console.log(`${ret.version} is greater than ${data.version}`);
-        $("#versionnew").text("new").css("display", "inline-block");
-      }
-    }
-  });
-});
-
 function _refresh_music_list(callback) {
   $("#music_list").empty();
   $.get("/musiclist", function (data, status) {
