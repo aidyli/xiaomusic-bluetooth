@@ -22,7 +22,7 @@
 ```text
 小爱音箱 / Web 页面
   -> XiaoMusic 容器
-  -> /host-scripts/call-xiaomi-bt-sidecar.sh {url}
+  -> /app/bin/call-xiaomi-bt-sidecar.sh {url}
   -> 127.0.0.1:58091 bt-audio-sidecar HTTP bridge
   -> sidecar 内 systemd + D-Bus + BlueZ + PulseAudio + mpv
   -> USB 蓝牙适配器
@@ -34,13 +34,13 @@
 推荐使用以下两个镜像 tag：
 
 ```text
-registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v1
+registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v2
 registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:bluetooth-sidecar-systemd
 ```
 
 说明：
 
-- `registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v1` 是发布到阿里云镜像仓库的主 XiaoMusic 蓝牙修复版镜像；
+- `registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v2` 是发布到阿里云镜像仓库的主 XiaoMusic 蓝牙修复版镜像；
 - `registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:bluetooth-sidecar-systemd` 是发布到阿里云镜像仓库的蓝牙 sidecar 镜像，由本仓库配套 sidecar 构建产物打包而来，不是上游官方镜像；
 - 镜像 tag 同时作为部署版本标识，后续修复建议使用新 tag，不要覆盖已验证稳定 tag。
 
@@ -52,8 +52,8 @@ registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:bluetooth-sidec
 
 ```text
 XIAOMUSIC_BLUETOOTH_COMBO_ENABLED=true
-XIAOMUSIC_BLUETOOTH_COMBO_COMMAND=/host-scripts/call-xiaomi-bt-sidecar.sh {url}
-XIAOMUSIC_BLUETOOTH_COMBO_STOP_COMMAND=/host-scripts/stop-xiaomi-bt-sidecar.sh
+XIAOMUSIC_BLUETOOTH_COMBO_COMMAND=/app/bin/call-xiaomi-bt-sidecar.sh {url}
+XIAOMUSIC_BLUETOOTH_COMBO_STOP_COMMAND=/app/bin/stop-xiaomi-bt-sidecar.sh
 XIAOMUSIC_BLUETOOTH_COMBO_TIMEOUT_SEC=20
 ```
 
@@ -140,7 +140,7 @@ services:
       PULSE_SERVER: "unix:/run/pulse/native"
 
   xiaomusic:
-    image: registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v1
+    image: registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v2
     container_name: xiaomusic
     restart: always
     network_mode: host
@@ -150,12 +150,14 @@ services:
       - XIAOMUSIC_PORT=58090
       - XIAOMUSIC_PUBLIC_PORT=58090
       - XIAOMUSIC_HOSTNAME=http://192.168.0.100
+      - BT_SIDECAR_BASE=http://127.0.0.1:58091
+      - BT_SIDECAR_TIMEOUT=20
+      - BT_SIDECAR_CONNECT_TIMEOUT=60
       - XIAOMUSIC_BLUETOOTH_COMBO_ENABLED=true
-      - XIAOMUSIC_BLUETOOTH_COMBO_COMMAND=/host-scripts/call-xiaomi-bt-sidecar.sh {url}
-      - XIAOMUSIC_BLUETOOTH_COMBO_STOP_COMMAND=/host-scripts/stop-xiaomi-bt-sidecar.sh
+      - XIAOMUSIC_BLUETOOTH_COMBO_COMMAND=/app/bin/call-xiaomi-bt-sidecar.sh {url}
+      - XIAOMUSIC_BLUETOOTH_COMBO_STOP_COMMAND=/app/bin/stop-xiaomi-bt-sidecar.sh
       - XIAOMUSIC_BLUETOOTH_COMBO_TIMEOUT_SEC=20
     volumes:
-      - ./scripts:/host-scripts:ro
       - ./config:/app/conf:rw
       - ./cache:/app/cache:rw
       - /volume1/@home/pleach/Music:/app/music #挂载宿主机音乐目录
@@ -270,11 +272,6 @@ docker compose up -d --force-recreate bt-audio-sidecar
 ```text
 xiaomiai/
 ├── docker-compose.yaml
-├── scripts/
-│   ├── call-xiaomi-bt-sidecar.sh
-│   ├── stop-xiaomi-bt-sidecar.sh
-│   ├── connect-xiaomi-bt-sidecar.sh
-│   └── disconnect-xiaomi-bt-sidecar.sh
 ├── config/
 │   └── setting.json
 ├── cache/
@@ -293,54 +290,93 @@ xiaomiai/
 
 其中 `/var/lib/bluetooth` 非常重要，用于保存 BlueZ 配对和 trust 状态。否则每次重建 sidecar 后可能需要重新扫描、配对、连接。
 
-## sidecar 脚本
+## sidecar 调用脚本
 
-### `call-xiaomi-bt-sidecar.sh`
+主 XiaoMusic 镜像从 `v2` 开始已经内置 sidecar 调用脚本，不再需要在 compose 中挂载 `./scripts:/host-scripts:ro`。
+
+仓库内脚本目录：
+
+```text
+docker/xiaomusic-bluetooth-scripts/
+├── call-xiaomi-bt-sidecar.sh
+├── stop-xiaomi-bt-sidecar.sh
+├── connect-xiaomi-bt-sidecar.sh
+└── disconnect-xiaomi-bt-sidecar.sh
+```
+
+镜像内路径：
+
+```text
+/app/bin/call-xiaomi-bt-sidecar.sh
+/app/bin/stop-xiaomi-bt-sidecar.sh
+/app/bin/connect-xiaomi-bt-sidecar.sh
+/app/bin/disconnect-xiaomi-bt-sidecar.sh
+```
+
+这些脚本不写死部署路径，默认通过环境变量访问 sidecar：
+
+```text
+BT_SIDECAR_BASE=http://127.0.0.1:58091
+BT_SIDECAR_TIMEOUT=20
+BT_SIDECAR_CONNECT_TIMEOUT=60
+```
+
+如果改用 Docker bridge 网络或 sidecar 在其他机器上，只需要调整 `BT_SIDECAR_BASE`，不需要改脚本。
+
+### `/app/bin/call-xiaomi-bt-sidecar.sh`
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env sh
+set -eu
 
-URL=${1:?missing audio url}
-BASE=${BT_SIDECAR_BASE:-http://127.0.0.1:58091}
+URL="${1:?missing audio url}"
+BASE="${BT_SIDECAR_BASE:-http://127.0.0.1:58091}"
+TIMEOUT="${BT_SIDECAR_TIMEOUT:-20}"
 
-ENC=$(python3 - <<'PY' "$URL"
-import sys, urllib.parse
+ENC="$(python3 - "$URL" <<'PY'
+import sys
+import urllib.parse
 print(urllib.parse.quote(sys.argv[1], safe=''))
 PY
-)
+)"
 
-wget -qO- --timeout=20 "$BASE/play?url=$ENC"
+exec wget -qO- --timeout="$TIMEOUT" "$BASE/play?url=$ENC"
 ```
 
-### `stop-xiaomi-bt-sidecar.sh`
+### `/app/bin/stop-xiaomi-bt-sidecar.sh`
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env sh
+set -eu
 
-BASE=${BT_SIDECAR_BASE:-http://127.0.0.1:58091}
-wget -qO- --timeout=10 "$BASE/stop"
+BASE="${BT_SIDECAR_BASE:-http://127.0.0.1:58091}"
+TIMEOUT="${BT_SIDECAR_TIMEOUT:-20}"
+
+exec wget -qO- --timeout="$TIMEOUT" "$BASE/stop"
 ```
 
-### `connect-xiaomi-bt-sidecar.sh`
+### `/app/bin/connect-xiaomi-bt-sidecar.sh`
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env sh
+set -eu
 
-BASE=${BT_SIDECAR_BASE:-http://127.0.0.1:58091}
-wget -qO- --timeout=60 "$BASE/connect?async=0"
+BASE="${BT_SIDECAR_BASE:-http://127.0.0.1:58091}"
+TIMEOUT="${BT_SIDECAR_CONNECT_TIMEOUT:-60}"
+
+exec wget -qO- --timeout="$TIMEOUT" "$BASE/connect?async=0"
 ```
 
-### `disconnect-xiaomi-bt-sidecar.sh`
+### `/app/bin/disconnect-xiaomi-bt-sidecar.sh`
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env sh
+set -eu
 
-BASE=${BT_SIDECAR_BASE:-http://127.0.0.1:58091}
-wget -qO- --timeout=20 "$BASE/disconnect"
+BASE="${BT_SIDECAR_BASE:-http://127.0.0.1:58091}"
+TIMEOUT="${BT_SIDECAR_TIMEOUT:-20}"
+
+exec wget -qO- --timeout="$TIMEOUT" "$BASE/disconnect"
 ```
 
 ## 蓝牙 sidecar 镜像来源
@@ -455,35 +491,35 @@ gunzip -c xiaomusic-bluetooth-sidecar-systemd.tar.gz | docker load
 在本仓库根目录执行：
 
 ```bash
-docker build -t registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v1 .
+docker build -t registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v2 .
 ```
 
 如需从本地蓝牙修复 tag 转成阿里云镜像仓库 tag：
 
 ```bash
 docker tag xiaomusic:bluetooth-combo-global-playback-api-owner-20260530-r8 \
-  registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v1
+  registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v2
 ```
 
 推送到阿里云镜像仓库：
 
 ```bash
-docker push registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v1
+docker push registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v2
 ```
 
 打包：
 
 ```bash
-docker save registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v1 \
-  | gzip > xiaomusic-bluetooth-v1.tar.gz
+docker save registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v2 \
+  | gzip > xiaomusic-bluetooth-v2.tar.gz
 
-sha256sum xiaomusic-bluetooth-v1.tar.gz
+sha256sum xiaomusic-bluetooth-v2.tar.gz
 ```
 
 导入：
 
 ```bash
-gunzip -c xiaomusic-bluetooth-v1.tar.gz | docker load
+gunzip -c xiaomusic-bluetooth-v2.tar.gz | docker load
 ```
 
 ## 部署
@@ -579,7 +615,7 @@ curl -fsS 'http://127.0.0.1:58091/connect?async=0'
 播放音频 URL。
 
 ```bash
-docker exec xiaomusic /host-scripts/call-xiaomi-bt-sidecar.sh \
+docker exec xiaomusic /app/bin/call-xiaomi-bt-sidecar.sh \
   'av://lavfi:sine=frequency=880:duration=5'
 ```
 
@@ -588,7 +624,7 @@ docker exec xiaomusic /host-scripts/call-xiaomi-bt-sidecar.sh \
 停止 sidecar 内当前 `mpv` 播放。
 
 ```bash
-docker exec xiaomusic /host-scripts/stop-xiaomi-bt-sidecar.sh
+docker exec xiaomusic /app/bin/stop-xiaomi-bt-sidecar.sh
 ```
 
 ## 验证清单
@@ -609,11 +645,11 @@ curl -fsS http://127.0.0.1:58091/status
 curl -fsS 'http://127.0.0.1:58090/api/bluetooth/status?_=verify'
 
 # 5. 从 XiaoMusic 容器调用 sidecar 播放测试音
-docker exec xiaomusic /host-scripts/call-xiaomi-bt-sidecar.sh \
+docker exec xiaomusic /app/bin/call-xiaomi-bt-sidecar.sh \
   'av://lavfi:sine=frequency=880:duration=5'
 
 # 6. 停止测试音
-docker exec xiaomusic /host-scripts/stop-xiaomi-bt-sidecar.sh
+docker exec xiaomusic /app/bin/stop-xiaomi-bt-sidecar.sh
 ```
 
 如果 `/health` 中能看到类似下面的 sink，说明 A2DP 输出已经就绪：
@@ -642,8 +678,8 @@ bluez_sink.44_F7_70_81_9C_C4.a2dp_sink
 ```json
 {
   "bluetooth_combo_enabled": "true",
-  "bluetooth_combo_command": "/host-scripts/call-xiaomi-bt-sidecar.sh {url}",
-  "bluetooth_combo_stop_command": "/host-scripts/stop-xiaomi-bt-sidecar.sh",
+  "bluetooth_combo_command": "/app/bin/call-xiaomi-bt-sidecar.sh {url}",
+  "bluetooth_combo_stop_command": "/app/bin/stop-xiaomi-bt-sidecar.sh",
   "bluetooth_combo_timeout_sec": 20
 }
 ```
@@ -657,7 +693,7 @@ bluez_sink.44_F7_70_81_9C_C4.a2dp_sink
 ```bash
 curl -fsS http://127.0.0.1:58091/health
 curl -fsS http://127.0.0.1:58091/status
-docker exec xiaomusic /host-scripts/call-xiaomi-bt-sidecar.sh \
+docker exec xiaomusic /app/bin/call-xiaomi-bt-sidecar.sh \
   'av://lavfi:sine=frequency=880:duration=5'
 docker logs --tail=200 bt-audio-sidecar
 ```
@@ -695,7 +731,7 @@ XiaoMusic 和 sidecar 都使用 host network 后，XiaoMusic 容器内访问：
 
 ```text
 xiaomusic:bluetooth-combo-stable-20260526
-registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v1
+registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v2
 registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:bluetooth-sidecar-systemd
 ```
 

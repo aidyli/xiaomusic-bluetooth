@@ -101,6 +101,10 @@ COPY --from=builder /app/xiaomusic.py .
 COPY --from=builder /app/xiaomusic/__init__.py /base_version.py
 COPY --from=builder /app/package.json .
 
+# 复制蓝牙 sidecar 调用脚本到镜像内，避免部署时额外挂载 ./scripts
+COPY docker/xiaomusic-bluetooth-scripts/*.sh /app/bin/
+RUN chmod +x /app/bin/*.sh
+
 # 创建FFmpeg软链接目录（兼容不同系统的ffmpeg路径）
 RUN mkdir -p /app/ffmpeg/bin \
     && ln -s $(which ffmpeg) /app/ffmpeg/bin/ffmpeg \
