@@ -568,35 +568,8 @@ docker build -t xiaomusic .
 作者不保证本项目的准确性、完整性、及时性、可靠性，也不承担任何因使用本项目而产生的任何损失或损害责任。
 使用本项目即表示您已阅读并同意本免责声明的全部内容。
 
-## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=hanxi/xiaomusic&type=Date)](https://star-history.com/#hanxi/xiaomusic&Date)
 
-## 💖 支持项目
-
-如果这个项目对你有帮助，欢迎通过以下方式支持：
-
-### ⭐ Star 项目
-点击右上角的 ⭐ Star 按钮，让更多人发现这个项目
-
-### 💰 赞赏支持
-- [💝 爱发电](https://afdian.com/a/imhanxi) - 持续支持项目发展
-- 扫码请作者喝杯奶茶 ☕
-
-<p align="center">
-  <img src="https://i.v2ex.co/7Q03axO5l.png" alt="赞赏码" width="300">
-</p>
-
-### 🎁 其他支持方式
-- 分享给更多需要的朋友
-- 提交 Bug 报告和功能建议
-- 贡献代码和文档
-
----
-
-<p align="center">
-  <strong>感谢你的支持！❤️</strong>
-</p>
 
 ## License
 
