@@ -627,20 +627,43 @@ class XiaoMusic:
 
     # 获取当前的播放列表
     def get_cur_play_list(self, did):
+        device = self._get_shared_playback_device(did)
+        if device:
+            return device.get_cur_play_list()
         return self.device_manager.devices[did].get_cur_play_list()
+
+    def _get_shared_playback_device(self, did):
+        """蓝牙组合模式下返回当前全局播放 owner，供 Web/API 显示统一进度。"""
+        device_manager = self.device_manager
+        if device_manager is None:
+            return None
+        device = device_manager.devices.get(did)
+        if not getattr(self.config, "bluetooth_combo_enabled", False):
+            return device
+        if not device:
+            return device
+        for candidate in device_manager.devices.values():
+            if candidate.is_playing:
+                return candidate
+        return device
 
     # 正在播放中的音乐
     def playingmusic(self, did):
-        cur_music = self.device_manager.devices[did].get_cur_music()
+        device = self._get_shared_playback_device(did)
+        cur_music = device.get_cur_music() if device else ""
         self.log.debug(f"playingmusic. cur_music:{cur_music}")
         return cur_music
 
     def get_offset_duration(self, did):
-        return self.device_manager.devices[did].get_offset_duration()
+        device = self._get_shared_playback_device(did)
+        if not device:
+            return 0, 0
+        return device.get_offset_duration()
 
     # 当前是否正在播放歌曲
     def isplaying(self, did):
-        return self.device_manager.devices[did].is_playing
+        device = self._get_shared_playback_device(did)
+        return device.is_playing if device else False
 
     # 获取当前配置
     def getconfig(self):

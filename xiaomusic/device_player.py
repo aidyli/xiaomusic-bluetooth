@@ -437,9 +437,22 @@ class XiaoMusicDevice:
         """播放下一首（外部接口）"""
         return await self._play_next()
 
-    async def _play_next(self):
+    async def _play_next(self, expected_session_id=None):
         """播放下一首（内部实现）"""
+        # 下一首定时器可能已经醒来并通过了第一次 session 检查，但在真正
+        # 切歌前，另一只同组音箱又接管了播放。这里必须再次校验，避免
+        # 旧音箱 A 的 timer 在音箱 B 已播放新歌后继续强行切歌。
+        if expected_session_id is not None and not self._is_current_session(expected_session_id):
+            self.log.info(
+                f"下一曲请求已过期，跳过 did:{self.did} session:{expected_session_id} current:{self._play_session_id}"
+            )
+            return
         self._apply_group_state_to_device()
+        if expected_session_id is not None and not self._is_current_session(expected_session_id):
+            self.log.info(
+                f"下一曲请求同步后已过期，跳过 did:{self.did} session:{expected_session_id} current:{self._play_session_id}"
+            )
+            return
         self.log.info("开始播放下一首")
         name = self.get_cur_music()
         if (
@@ -453,6 +466,11 @@ class XiaoMusicDevice:
         ):
             name = self.get_next_music()
             self.log.info(f"get_next_music {name}")
+        if expected_session_id is not None and not self._is_current_session(expected_session_id):
+            self.log.info(
+                f"下一曲请求播放前已过期，跳过 did:{self.did} session:{expected_session_id} current:{self._play_session_id}"
+            )
+            return
         self.log.info(f"_play_next. name:{name}, cur_music:{self.get_cur_music()}")
         if name == "":
             self.log.info("本地没有歌曲")
@@ -618,34 +636,42 @@ class XiaoMusicDevice:
         device_manager = self.xiaomusic.device_manager
         if device_manager is None:
             return state
-        for device in device_manager.get_group_devices(self.group_name).values():
+        for device in self._get_playback_scope_devices().values():
             if device is self:
                 continue
             device._apply_group_state_to_device()
         return state
 
-    async def _invalidate_group_play_sessions(self):
-        """让组内旧播放会话失效，并取消所有旧的下一首/预缓存任务。
+    def _get_playback_scope_devices(self):
+        """返回本次播放任务应接管的设备集合。
 
-        在 group_list/stereo_split 场景下，任意一只音箱的新播放请求都会接管整组。
-        如果只取消当前 did 的定时器，另一只音箱旧歌曲的 next timer 仍会在到点后
-        调用 _play_next()，从而打断当前正在播放的新歌曲。
+        蓝牙 sidecar/立体声组合模式下，任意 XiaoAI 都只是控制入口，真实输出
+        是同一个蓝牙组合。因此不能再依赖 group_list；新播放必须全局取消所有
+        XiaoMusicDevice 的旧进度、旧 timer 和旧 session。
         """
         device_manager = self.xiaomusic.device_manager
         if device_manager is None:
-            self._bump_play_session()
-            self.is_playing = False
-            self._start_time = 0
-            self._paused_time = 0
-            await self.cancel_next_timer()
-            await self._cancel_prefetch_timer()
-            return self._play_session_id
-        devices = device_manager.get_group_devices(self.group_name)
-        self.log.info(f"invalidate_group_play_sessions {self.group_name} {list(devices.keys())}")
+            return {self.did: self}
+        if getattr(self.config, "bluetooth_combo_enabled", False):
+            return device_manager.devices
+        return device_manager.get_group_devices(self.group_name)
+
+    async def _invalidate_group_play_sessions(self):
+        """让旧播放会话失效，并取消所有旧的下一首/预缓存任务。
+
+        在 group_list/stereo_split 场景下，任意一只音箱的新播放请求都会接管整组。
+        在蓝牙 sidecar/立体声组合场景下，任意设备只是控制入口，必须全局接管
+        所有 XiaoMusicDevice，避免 A 的旧进度/timer 在 B 播放新歌后继续运行。
+        """
+        devices = self._get_playback_scope_devices()
+        self.log.info(
+            f"invalidate_group_play_sessions scope:{'all_devices' if getattr(self.config, 'bluetooth_combo_enabled', False) else self.group_name} devices:{list(devices.keys())}"
+        )
         for device in devices.values():
             device._bump_play_session()
             device.is_playing = False
             device._start_time = 0
+            device._duration = 0
             device._paused_time = 0
             await device.cancel_next_timer()
             await device._cancel_prefetch_timer()
@@ -726,7 +752,7 @@ class XiaoMusicDevice:
                 # 没到 5 次，静默 0.5 秒直接切下一首。小爱甚至都不知道发生过什么！
                 if self.is_playing and self._last_cmd != "stop":
                     await asyncio.sleep(0.5)
-                    await self._play_next()
+                    await self._play_next(expected_session_id=session_id)
                 return
 
         # 4. 真正安全的下发播放阶段
@@ -743,7 +769,7 @@ class XiaoMusicDevice:
                 and self._last_cmd != "stop"
                 and self._play_failed_cnt < 5
             ):
-                await self._play_next()
+                await self._play_next(expected_session_id=session_id)
             return
 
         if not self._is_current_session(session_id):
@@ -1608,7 +1634,7 @@ class XiaoMusicDevice:
                     self.log.info(f"单曲播放不继续播放下一首 did: {self.did}")
                     await self.stop(arg1="notts")
                 else:
-                    await self._play_next()
+                    await self._play_next(expected_session_id=session_id)
 
             except Exception as e:
                 self.log.error(f"Execption {e}")
@@ -1701,11 +1727,11 @@ class XiaoMusicDevice:
         self.log.info("stop now")
 
     async def group_force_stop_xiaoai(self):
-        """强制停止组内所有设备"""
-        device_id_list = self.xiaomusic.device_manager.get_group_device_id_list(
-            self.group_name
-        )
-        self.log.info(f"group_force_stop_xiaoai {self.group_name} {device_id_list}")
+        """强制停止播放作用域内所有设备。"""
+        devices = self._get_playback_scope_devices()
+        device_id_list = [device.device_id for device in devices.values()]
+        scope_name = "all_devices" if getattr(self.config, "bluetooth_combo_enabled", False) else self.group_name
+        self.log.info(f"group_force_stop_xiaoai scope:{scope_name} {device_id_list}")
         tasks = [self.force_stop_xiaoai(device_id) for device_id in device_id_list]
         results = await asyncio.gather(*tasks)
         self.log.info(f"group_force_stop_xiaoai {device_id_list} {results}")
@@ -1751,11 +1777,12 @@ class XiaoMusicDevice:
         self.log.info(f"下一曲定时器已取消 did: {self.did}")
 
     async def cancel_group_next_timer(self):
-        """取消组内所有设备的下一首定时器"""
-        devices = self.xiaomusic.device_manager.get_group_devices(self.group_name)
-        self.log.info(f"cancel_group_next_timer {devices}")
+        """取消播放作用域内所有设备的下一首定时器。"""
+        devices = self._get_playback_scope_devices()
+        self.log.info(f"cancel_group_next_timer scope devices:{list(devices.keys())}")
         for device in devices.values():
             await device.cancel_next_timer()
+            await device._cancel_prefetch_timer()
 
     def get_cur_play_list(self):
         """获取当前播放列表名称"""

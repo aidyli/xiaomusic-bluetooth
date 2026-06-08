@@ -152,9 +152,11 @@ docker run -p 58090:8090 -v /xiaomusic_music:/app/music -v /xiaomusic_conf:/app/
 ### 组播放、播放列表选择与蓝牙 sidecar 修复
 
 - 同一 `group_list` 内的多台设备现在会同步播放运行态，包括 `is_playing`、开始时间、时长、暂停偏移和播放 session；任一设备发起新播放时会废弃组内旧 session/timer，避免其他设备的旧进度条或旧下一首定时器影响当前播放。
+- 蓝牙 sidecar/立体声组合模式下，任意小爱音箱都只是控制入口，播放输出汇聚到同一个蓝牙组合；任一设备新播放前会全局遍历所有 `XiaoMusicDevice`，取消旧 next/prefetch timer、重置旧进度并废弃旧 session。
+- WebSocket/API 在蓝牙组合模式下会统一返回当前播放 owner 的歌曲、歌单、进度和播放状态，避免 A/B 页面各自显示旧任务。
 - Web 首页手动选择播放列表时，不再被 WebSocket 推送的“正在播放歌曲所在列表”强制拉回；当前播放信息和进度仍会继续更新。
 - Web 设置页支持蓝牙 sidecar 状态刷新、扫描、连接、断开，并对请求追加 cache-buster，避免浏览器/代理缓存导致按钮看似无效。
-- 本地部署版本建议通过镜像 tag 和页面部署标识同时识别；当前 sidecar 修复镜像 tag 为 `xiaomusic:bluetooth-combo-group-playlist-sidecar-fix-20260530-r4`，播放命令应指向 `/host-scripts/call-xiaomi-bt-sidecar.sh {url}`，停止命令应指向 `/host-scripts/stop-xiaomi-bt-sidecar.sh`。
+- 本地部署版本建议通过镜像 tag 和页面部署标识同时识别；当前最终修复镜像 tag 为 `xiaomusic:bluetooth-combo-global-playback-api-owner-20260530-r8`，播放命令应指向 `/host-scripts/call-xiaomi-bt-sidecar.sh {url}`，停止命令应指向 `/host-scripts/stop-xiaomi-bt-sidecar.sh`。
 
 #### 歌单管理
 - **播放歌单+目录名** - 例如：播放歌单其他

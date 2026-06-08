@@ -55,9 +55,16 @@ class DeviceManager:
         for did, device in self.config.devices.items():
             # 构建 device_id 到 did 的映射
             self.device_id_did[device.device_id] = did
-            group_name = did2group.get(did)
-            if not group_name or group_name is None:
-                group_name = device.name
+            # 蓝牙立体声组合/sidecar 模式下，真实播放输出已经汇聚到同一个
+            # 蓝牙设备；即使用户没有配置 group_list，也必须把所有 XiaoAI 入口
+            # 视为同一个播放任务组。否则 A/B 会按各自设备名分组，A 的旧进度
+            # 和 next timer 不会被 B 的新播放命令取消。
+            if getattr(self.config, "bluetooth_combo_enabled", False):
+                group_name = "bluetooth_combo_shared"
+            else:
+                group_name = did2group.get(did)
+                if not group_name or group_name is None:
+                    group_name = device.name
             self.groups.setdefault(group_name, []).append(device.device_id)
             self.devices[did] = XiaoMusicDevice(self.xiaomusic, device, group_name)
 
