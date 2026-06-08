@@ -158,6 +158,196 @@ docker run -p 58090:8090 -v /xiaomusic_music:/app/music -v /xiaomusic_conf:/app/
 - Web 设置页支持蓝牙 sidecar 状态刷新、扫描、连接、断开，并对请求追加 cache-buster，避免浏览器/代理缓存导致按钮看似无效。
 - 本地部署版本建议通过镜像 tag 和页面部署标识同时识别；当前最终修复镜像 tag 为 `xiaomusic:bluetooth-combo-global-playback-api-owner-20260530-r8`，播放命令应指向 `/host-scripts/call-xiaomi-bt-sidecar.sh {url}`，停止命令应指向 `/host-scripts/stop-xiaomi-bt-sidecar.sh`。
 
+### 蓝牙立体声组合 Sidecar 部署说明
+
+本仓库的蓝牙版本使用“双容器”部署：`xiaomusic` 负责 Web、语音指令和播放任务状态，`bt-audio-sidecar` 独占 USB 蓝牙适配器并负责 BlueZ/PulseAudio/mpv 播放。
+
+```text
+XiaoMusic 容器
+  -> /host-scripts/call-xiaomi-bt-sidecar.sh {url}
+  -> 127.0.0.1:58091 bt-audio-sidecar HTTP bridge
+  -> sidecar 内 systemd + D-Bus + bluetooth.service + PulseAudio + mpv
+  -> USB 蓝牙 dongle
+  -> 蓝牙立体声组合
+```
+
+#### 当前生产 Compose 形态
+
+生产部署目录示例：`/volume2/docker/Docker/xiaomiai`。
+
+```yaml
+services:
+  bt-audio-sidecar:
+    image: xiaomusic:bluetooth-sidecar-systemd
+    container_name: bt-audio-sidecar
+    privileged: true
+    network_mode: host
+    cgroup: host
+    cgroup_parent: docker.slice
+    restart: unless-stopped
+    stop_signal: SIGRTMIN+3
+    stop_grace_period: 30s
+    tmpfs:
+      - /run
+      - /run/lock
+      - /tmp
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - /dev:/dev
+      - /sys:/sys:ro
+      - /run/udev:/run/udev:ro
+      - ./bt-sidecar-systemd/state/bluetooth:/var/lib/bluetooth
+    environment:
+      BT_TARGET_MAC: "44:F7:70:81:9C:C4"
+      BT_BRIDGE_PORT: "58091"
+      PULSE_SERVER: "unix:/run/pulse/native"
+
+  xiaomusic:
+    image: xiaomusic:bluetooth-combo-global-playback-api-owner-20260530-r8
+    container_name: xiaomusic
+    restart: always
+    network_mode: host
+    depends_on:
+      - bt-audio-sidecar
+    environment:
+      - XIAOMUSIC_PORT=58090
+      - XIAOMUSIC_PUBLIC_PORT=58090
+      - XIAOMUSIC_HOSTNAME=http://192.168.0.100
+      - XIAOMUSIC_BLUETOOTH_COMBO_ENABLED=true
+      - XIAOMUSIC_BLUETOOTH_COMBO_COMMAND=/host-scripts/call-xiaomi-bt-sidecar.sh {url}
+      - XIAOMUSIC_BLUETOOTH_COMBO_STOP_COMMAND=/host-scripts/stop-xiaomi-bt-sidecar.sh
+      - XIAOMUSIC_BLUETOOTH_COMBO_TIMEOUT_SEC=20
+    volumes:
+      - ./scripts:/host-scripts:ro
+      - /volume1/@home/pleach/Music:/app/music
+      - ./config:/app/conf:rw
+      - ./cache:/app/cache:rw
+```
+
+关键点：
+
+- `bt-audio-sidecar` 必须使用 `privileged: true`，并挂载 `/dev`、`/run/udev`、`/sys`，以便容器内 BlueZ 接管 USB 蓝牙适配器。
+- `/sys` 建议只读挂载为 `/sys:/sys:ro`；生产验证中，读写挂载曾导致 BlueZ adapter/GATT 初始化异常。
+- `/var/lib/bluetooth` 持久化到 `./bt-sidecar-systemd/state/bluetooth`，避免每次重建容器都重新配对。
+- 两个容器都使用 `network_mode: host`，所以 XiaoMusic 容器内访问 `127.0.0.1:58091` 就是访问 sidecar bridge。
+
+#### `xiaomusic:bluetooth-sidecar-systemd` 镜像来源
+
+`xiaomusic:bluetooth-sidecar-systemd` 是本地构建的 Debian systemd 蓝牙 sidecar 镜像，不是上游官方镜像。它的职责是：
+
+- 运行 systemd、D-Bus 和 `bluetooth.service`；
+- 运行 PulseAudio system daemon，并加载 Bluetooth A2DP 相关模块；
+- 运行一个 Python HTTP bridge，提供 `/health`、`/status`、`/scan`、`/connect`、`/play`、`/stop`、`/disconnect`；
+- 调用 `mpv` 把 XiaoMusic 传入的音频 URL 播放到 BlueZ A2DP sink。
+
+镜像构建目录建议放在部署目录旁，例如：
+
+```text
+/volume2/docker/Docker/xiaomiai/bt-sidecar-systemd/
+```
+
+构建目录至少包含：
+
+```text
+Dockerfile
+sidecar-server.py
+pulse-system.pa
+bt-prep.service
+bt-pulseaudio.service
+bt-sidecar-bridge.service
+```
+
+Dockerfile 核心内容：
+
+```dockerfile
+FROM debian:bookworm-slim
+ENV container=docker DEBIAN_FRONTEND=noninteractive
+STOPSIGNAL SIGRTMIN+3
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+    systemd systemd-sysv dbus bluez bluez-tools rfkill usbutils procps psmisc \
+    pulseaudio pulseaudio-module-bluetooth pulseaudio-utils \
+    mpv ffmpeg ca-certificates python3 curl kmod \
+ && rm -rf /var/lib/apt/lists/* \
+ && systemctl set-default multi-user.target \
+ && systemctl enable bluetooth.service
+COPY sidecar-server.py /usr/local/bin/sidecar-server.py
+COPY pulse-system.pa /etc/pulse/system.pa
+COPY bt-pulseaudio.service /etc/systemd/system/bt-pulseaudio.service
+COPY bt-sidecar-bridge.service /etc/systemd/system/bt-sidecar-bridge.service
+COPY bt-prep.service /etc/systemd/system/bt-prep.service
+RUN chmod +x /usr/local/bin/sidecar-server.py \
+ && systemctl enable bt-prep.service bt-pulseaudio.service bt-sidecar-bridge.service
+CMD ["/sbin/init"]
+```
+
+构建命令：
+
+```bash
+cd /volume2/docker/Docker/xiaomiai/bt-sidecar-systemd
+docker build -t xiaomusic:bluetooth-sidecar-systemd .
+```
+
+如果需要离线迁移到另一台机器，可以打包镜像：
+
+```bash
+docker save xiaomusic:bluetooth-sidecar-systemd | gzip > xiaomusic-bluetooth-sidecar-systemd.tar.gz
+sha256sum xiaomusic-bluetooth-sidecar-systemd.tar.gz
+```
+
+在目标机器导入：
+
+```bash
+gunzip -c xiaomusic-bluetooth-sidecar-systemd.tar.gz | docker load
+```
+
+#### 主 XiaoMusic 蓝牙版镜像来源
+
+主应用镜像 `xiaomusic:bluetooth-combo-global-playback-api-owner-20260530-r8` 来自本仓库蓝牙分支/提交构建，用于区分部署版本。推荐从仓库根目录构建：
+
+```bash
+cd /path/to/xiaomusic
+docker build -t xiaomusic:bluetooth-combo-global-playback-api-owner-20260530-r8 .
+```
+
+也可以打包迁移：
+
+```bash
+docker save xiaomusic:bluetooth-combo-global-playback-api-owner-20260530-r8 | gzip > xiaomusic-bluetooth-combo-global-playback-api-owner-20260530-r8.tar.gz
+sha256sum xiaomusic-bluetooth-combo-global-playback-api-owner-20260530-r8.tar.gz
+```
+
+#### Sidecar HTTP 接口
+
+默认监听：`127.0.0.1:58091`。
+
+```text
+GET /health
+GET /status
+GET /scan?seconds=90
+GET /connect?async=0
+GET /play?url=<encoded-url>
+GET /stop
+GET /disconnect
+```
+
+常用验证：
+
+```bash
+curl -fsS http://127.0.0.1:58091/health
+curl -fsS http://127.0.0.1:58091/status
+curl -fsS 'http://127.0.0.1:58090/api/bluetooth/status?_=verify'
+docker exec xiaomusic /host-scripts/call-xiaomi-bt-sidecar.sh 'av://lavfi:sine=frequency=880:duration=5'
+docker exec xiaomusic /host-scripts/stop-xiaomi-bt-sidecar.sh
+```
+
+#### 蓝牙扫描与配对注意事项
+
+- 扫描前先让“立体声组合”进入可发现/配对模式。
+- 扫描建议 60-120 秒，短扫描可能错过设备窗口。
+- 如果重建 sidecar 后无法连接，优先检查 `/var/lib/bluetooth` 持久化状态、目标 MAC、`/health` 是否有 `bluez_sink`。
+- 当前 sidecar 接管 USB 蓝牙 dongle 时，宿主机上的 BlueZ/旧 bridge 不应同时接管同一个适配器。
+
 #### 歌单管理
 - **播放歌单+目录名** - 例如：播放歌单其他
 - **播放歌单第几个+列表名** - 详见 [#158](https://github.com/hanxi/xiaomusic/issues/158)
