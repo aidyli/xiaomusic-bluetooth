@@ -34,13 +34,13 @@
 推荐使用以下两个镜像 tag：
 
 ```text
-registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v2
+registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v3
 registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:bluetooth-sidecar-systemd
 ```
 
 说明：
 
-- `registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v2` 是发布到阿里云镜像仓库的主 XiaoMusic 蓝牙修复版镜像；
+- `registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v3` 是发布到阿里云镜像仓库的主 XiaoMusic 蓝牙修复版镜像；
 - `registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:bluetooth-sidecar-systemd` 是发布到阿里云镜像仓库的蓝牙 sidecar 镜像，由本仓库配套 sidecar 构建产物打包而来，不是上游官方镜像；
 - 镜像 tag 同时作为部署版本标识，后续修复建议使用新 tag，不要覆盖已验证稳定 tag。
 
@@ -52,9 +52,8 @@ registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:bluetooth-sidec
 
 ```text
 XIAOMUSIC_BLUETOOTH_COMBO_ENABLED=true
-XIAOMUSIC_BLUETOOTH_COMBO_COMMAND=/app/bin/call-xiaomi-bt-sidecar.sh {url}
-XIAOMUSIC_BLUETOOTH_COMBO_STOP_COMMAND=/app/bin/stop-xiaomi-bt-sidecar.sh
-XIAOMUSIC_BLUETOOTH_COMBO_TIMEOUT_SEC=20
+XIAOMUSIC_BLUETOOTH_SIDECAR_BASE=http://127.0.0.1:58091
+XIAOMUSIC_BLUETOOTH_SIDECAR_TIMEOUT_SEC=20
 ```
 
 播放时 XiaoMusic 会调用 sidecar 播放脚本，把音频 URL 转交给 `bt-audio-sidecar`。停止播放时会调用 stop 脚本，停止 sidecar 内的 `mpv`。
@@ -140,7 +139,7 @@ services:
       PULSE_SERVER: "unix:/run/pulse/native"
 
   xiaomusic:
-    image: registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v2
+    image: registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v3
     container_name: xiaomusic
     restart: always
     network_mode: host
@@ -150,13 +149,9 @@ services:
       - XIAOMUSIC_PORT=58090
       - XIAOMUSIC_PUBLIC_PORT=58090
       - XIAOMUSIC_HOSTNAME=http://192.168.0.100
-      - BT_SIDECAR_BASE=http://127.0.0.1:58091
-      - BT_SIDECAR_TIMEOUT=20
-      - BT_SIDECAR_CONNECT_TIMEOUT=60
       - XIAOMUSIC_BLUETOOTH_COMBO_ENABLED=true
-      - XIAOMUSIC_BLUETOOTH_COMBO_COMMAND=/app/bin/call-xiaomi-bt-sidecar.sh {url}
-      - XIAOMUSIC_BLUETOOTH_COMBO_STOP_COMMAND=/app/bin/stop-xiaomi-bt-sidecar.sh
-      - XIAOMUSIC_BLUETOOTH_COMBO_TIMEOUT_SEC=20
+      - XIAOMUSIC_BLUETOOTH_SIDECAR_BASE=http://127.0.0.1:58091
+      - XIAOMUSIC_BLUETOOTH_SIDECAR_TIMEOUT_SEC=20
     volumes:
       - ./config:/app/conf:rw
       - ./cache:/app/cache:rw
@@ -290,9 +285,31 @@ xiaomiai/
 
 其中 `/var/lib/bluetooth` 非常重要，用于保存 BlueZ 配对和 trust 状态。否则每次重建 sidecar 后可能需要重新扫描、配对、连接。
 
-## sidecar 调用脚本
+## Sidecar HTTP 直连与 legacy 脚本
 
-主 XiaoMusic 镜像从 `v2` 开始已经内置 sidecar 调用脚本，不再需要在 compose 中挂载 `./scripts:/host-scripts:ro`。
+主 XiaoMusic 镜像从 `v3` 开始由 Python 代码直接调用 sidecar HTTP API，不再依赖 shell 脚本或 `./scripts:/host-scripts:ro` 挂载。
+
+推荐配置：
+
+```yaml
+XIAOMUSIC_BLUETOOTH_COMBO_ENABLED=true
+XIAOMUSIC_BLUETOOTH_SIDECAR_BASE=http://127.0.0.1:58091
+XIAOMUSIC_BLUETOOTH_SIDECAR_TIMEOUT_SEC=20
+```
+
+播放时 XiaoMusic 直接请求：
+
+```text
+GET ${XIAOMUSIC_BLUETOOTH_SIDECAR_BASE}/play?url=<audio-url>
+```
+
+停止时直接请求：
+
+```text
+GET ${XIAOMUSIC_BLUETOOTH_SIDECAR_BASE}/stop
+```
+
+v2 内置的 `/app/bin/*.sh` 仍保留为 legacy 兼容，但默认部署不再使用。
 
 仓库内脚本目录：
 
@@ -491,35 +508,35 @@ gunzip -c xiaomusic-bluetooth-sidecar-systemd.tar.gz | docker load
 在本仓库根目录执行：
 
 ```bash
-docker build -t registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v2 .
+docker build -t registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v3 .
 ```
 
 如需从本地蓝牙修复 tag 转成阿里云镜像仓库 tag：
 
 ```bash
 docker tag xiaomusic:bluetooth-combo-global-playback-api-owner-20260530-r8 \
-  registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v2
+  registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v3
 ```
 
 推送到阿里云镜像仓库：
 
 ```bash
-docker push registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v2
+docker push registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v3
 ```
 
 打包：
 
 ```bash
-docker save registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v2 \
-  | gzip > xiaomusic-bluetooth-v2.tar.gz
+docker save registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v3 \
+  | gzip > xiaomusic-bluetooth-v3.tar.gz
 
-sha256sum xiaomusic-bluetooth-v2.tar.gz
+sha256sum xiaomusic-bluetooth-v3.tar.gz
 ```
 
 导入：
 
 ```bash
-gunzip -c xiaomusic-bluetooth-v2.tar.gz | docker load
+gunzip -c xiaomusic-bluetooth-v3.tar.gz | docker load
 ```
 
 ## 部署
@@ -731,7 +748,7 @@ XiaoMusic 和 sidecar 都使用 host network 后，XiaoMusic 容器内访问：
 
 ```text
 xiaomusic:bluetooth-combo-stable-20260526
-registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v2
+registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:v3
 registry.cn-hangzhou.aliyuncs.com/aliyun_nas/xiaomusic-bluetooth:bluetooth-sidecar-systemd
 ```
 

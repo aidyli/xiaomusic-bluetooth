@@ -1436,6 +1436,49 @@ class XiaoMusicDevice:
             )
             return None
 
+    async def _call_bluetooth_sidecar(self, path: str, params: dict | None = None):
+        """Call Bluetooth sidecar HTTP API and return parsed JSON/dict result."""
+        base = (getattr(self.config, "bluetooth_sidecar_base", "") or "").strip()
+        if not base:
+            return None
+        url = f"{base.rstrip('/')}/{path.lstrip('/')}"
+        timeout_sec = getattr(self.config, "bluetooth_sidecar_timeout_sec", 20) or 20
+        timeout = aiohttp.ClientTimeout(total=timeout_sec)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url, params=params) as resp:
+                    body = await resp.text()
+                    try:
+                        data = json.loads(body)
+                    except json.JSONDecodeError:
+                        data = {"raw": body}
+                    if resp.status >= 400:
+                        self.log.warning(
+                            f"bluetooth sidecar http failed status:{resp.status} url:{url} body:{body[-1000:]}"
+                        )
+                        return None
+                    if isinstance(data, dict):
+                        return data
+                    return {"data": data}
+        except Exception as e:
+            self.log.warning(f"bluetooth sidecar http exception url:{url}: {e}")
+            return None
+
+    async def _run_bluetooth_sidecar_stop(self):
+        """Stop current Bluetooth sidecar playback through HTTP API."""
+        if not self.config.bluetooth_combo_enabled:
+            return None
+        if not (getattr(self.config, "bluetooth_sidecar_base", "") or "").strip():
+            return None
+        data = await self._call_bluetooth_sidecar("/stop")
+        if not data:
+            return None
+        if data.get("ok") is False or data.get("ret") == "ERROR":
+            self.log.warning(f"bluetooth sidecar stop failed: {data}")
+            return None
+        self.log.info(f"bluetooth sidecar stop ok: {data}")
+        return {"bluetooth_sidecar_stop": True, "result": data}
+
     async def _run_bluetooth_combo_stop_command(self):
         """执行蓝牙立体声组合停止命令，用于暂停/停止当前宿主机 mpv 播放。"""
         if not self.config.bluetooth_combo_enabled:
@@ -1467,6 +1510,22 @@ class XiaoMusicDevice:
         except Exception as e:
             self.log.warning(f"bluetooth_combo stop command exception: {e}")
             return None
+
+    async def _run_bluetooth_sidecar_play(self, url, name):
+        """Play URL through Bluetooth sidecar HTTP API."""
+        if not self.config.bluetooth_combo_enabled:
+            return None
+        if not (getattr(self.config, "bluetooth_sidecar_base", "") or "").strip():
+            return None
+        await self._run_bluetooth_sidecar_stop()
+        data = await self._call_bluetooth_sidecar("/play", params={"url": url})
+        if not data:
+            return None
+        if data.get("ok") is False or data.get("ret") == "ERROR":
+            self.log.warning(f"bluetooth sidecar play failed name:{name} result:{data}")
+            return None
+        self.log.info(f"bluetooth sidecar play ok name:{name} result:{data}")
+        return {"bluetooth_sidecar": True, "result": data}
 
     async def _run_bluetooth_combo_command(self, url, name):
         """通过配置的本地命令播放到蓝牙立体声组合。
@@ -1522,7 +1581,9 @@ class XiaoMusicDevice:
         device_id_list = self.xiaomusic.device_manager.get_group_device_id_list(
             self.group_name
         )
-        bluetooth_result = await self._run_bluetooth_combo_command(url, name)
+        bluetooth_result = await self._run_bluetooth_sidecar_play(url, name)
+        if bluetooth_result is None:
+            bluetooth_result = await self._run_bluetooth_combo_command(url, name)
         if bluetooth_result is not None:
             return bluetooth_result
 
@@ -1754,7 +1815,9 @@ class XiaoMusicDevice:
             await asyncio.sleep(3)  # 等它说完
         # 取消组内所有的下一首歌曲的定时器
         await self.cancel_group_next_timer()
-        await self._run_bluetooth_combo_stop_command()
+        stop_result = await self._run_bluetooth_sidecar_stop()
+        if stop_result is None:
+            await self._run_bluetooth_combo_stop_command()
         await self.group_force_stop_xiaoai()
         self.log.info("stop now")
 

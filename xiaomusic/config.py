@@ -209,10 +209,17 @@ class Config:
     stereo_split_cache_max_mb: int = int(
         os.getenv("XIAOMUSIC_STEREO_SPLIT_CACHE_MAX_MB", "2048")
     )
-    # 蓝牙立体声组合输出：把同组播放改为本地命令输出到宿主机蓝牙音频 sink。
+    # 蓝牙立体声组合输出：优先直接调用 sidecar HTTP API；旧命令模板保留为兼容回退。
     bluetooth_combo_enabled: bool = (
         os.getenv("XIAOMUSIC_BLUETOOTH_COMBO_ENABLED", "false").lower() == "true"
     )
+    bluetooth_sidecar_base: str = os.getenv(
+        "XIAOMUSIC_BLUETOOTH_SIDECAR_BASE", "http://127.0.0.1:58091"
+    )
+    bluetooth_sidecar_timeout_sec: int = int(
+        os.getenv("XIAOMUSIC_BLUETOOTH_SIDECAR_TIMEOUT_SEC", "20")
+    )
+    # Legacy: v1/v2 使用 shell 命令模板调用 sidecar；v3 起默认不再需要。
     bluetooth_combo_command: str = os.getenv("XIAOMUSIC_BLUETOOTH_COMBO_COMMAND", "")
     bluetooth_combo_stop_command: str = os.getenv(
         "XIAOMUSIC_BLUETOOTH_COMBO_STOP_COMMAND", ""

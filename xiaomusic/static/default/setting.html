@@ -9,9 +9,9 @@
     <link rel="preload" href="./materialicons.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="./materialiconsoutlined.woff2" as="font" type="font/woff2" crossorigin>
     <script src="./jquery-3.7.1.min.js?version=1779336642"></script>
-    <script src="./setting.js?version=group-playlist-fix-20260530-r3"></script>
+    <script src="./setting.js?version=bluetooth-sidecar-http-v3"></script>
     <link rel="stylesheet" type="text/css" href="./setting.css?version=1779336642" />
-    <meta name="xiaomusic-deploy-version" content="group-playlist-fix-20260530-r3">
+    <meta name="xiaomusic-deploy-version" content="bluetooth-sidecar-http-v3">
 
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-Z09NC1K7ZW"></script>
     <script>
@@ -30,7 +30,7 @@
             <h2>
                 <span>小爱音箱设置面板</span>
                 (<a id="version" href="https://xdocs.hanxi.cc/issues/changelog.html" target="_blank">版本未知</a>)
-                <span id="deploy-version" style="display:block;font-size:12px;line-height:1.6;opacity:.72;">部署版本：group-playlist-fix-20260530-r3</span>
+                <span id="deploy-version" style="display:block;font-size:12px;line-height:1.6;opacity:.72;">部署版本：bluetooth-sidecar-http-v3</span>
             </h2>
             <div class="header-buttons">
                 <button onclick="location.href = '/static/default/index.html'" aria-label="返回首页">
@@ -332,14 +332,23 @@
                             <option value="true">蓝牙：Sidecar 当前连接设备</option>
                         </select>
 
-                        <label for="bluetooth_combo_command">蓝牙播放命令模板:</label>
-                        <input id="bluetooth_combo_command" type="text" value="/host-scripts/play-xiaomi-bt.sh {url}" />
+                        <label for="bluetooth_sidecar_base">蓝牙 Sidecar 地址:</label>
+                        <input id="bluetooth_sidecar_base" type="text" value="http://127.0.0.1:58091" />
 
-                        <label for="bluetooth_combo_stop_command">蓝牙停止旧播放命令:</label>
-                        <input id="bluetooth_combo_stop_command" type="text" value="/host-scripts/stop-xiaomi-bt.sh" />
+                        <label for="bluetooth_sidecar_timeout_sec">Sidecar HTTP 超时秒数:</label>
+                        <input id="bluetooth_sidecar_timeout_sec" type="number" value="20" min="1" />
 
-                        <label for="bluetooth_combo_timeout_sec">蓝牙命令等待秒数:</label>
-                        <input id="bluetooth_combo_timeout_sec" type="number" value="8" min="1" />
+                        <details class="login-tips">
+                            <summary>旧版命令模板兼容项（v1/v2 使用，v3 默认不需要）</summary>
+                            <label for="bluetooth_combo_command">蓝牙播放命令模板:</label>
+                            <input id="bluetooth_combo_command" type="text" value="" />
+
+                            <label for="bluetooth_combo_stop_command">蓝牙停止旧播放命令:</label>
+                            <input id="bluetooth_combo_stop_command" type="text" value="" />
+
+                            <label for="bluetooth_combo_timeout_sec">蓝牙命令等待秒数:</label>
+                            <input id="bluetooth_combo_timeout_sec" type="number" value="8" min="1" />
+                        </details>
 
                         <div class="login-tips">
                             实时扫描前请先让蓝牙音箱/立体声组合进入可发现或配对模式；经典 A2DP 设备建议扫描 90~120 秒。扫描会由 bt-audio-sidecar 独占 USB 蓝牙适配器执行。
@@ -362,7 +371,7 @@
                         <pre id="bluetooth_scan_result" class="login-tips" style="white-space:pre-wrap;max-height:220px;overflow:auto;">蓝牙状态尚未刷新</pre>
 
                         <div class="login-tips">
-                            开启后，同组播放会优先把一路音频输出到 Sidecar 蓝牙 sink，由当前连接的蓝牙音频设备负责播放；关闭后恢复原来的小爱/Mina 组播或左右分轨逻辑。命令模板支持 {url} 和 {name}，保存配置后会重新初始化。
+                            开启后，同组播放会优先通过 Python 直接调用 Sidecar HTTP API，把一路音频输出到 Sidecar 蓝牙 sink，由当前连接的蓝牙音频设备负责播放；关闭后恢复原来的小爱/Mina 组播或左右分轨逻辑。保存配置后会重新初始化。
                         </div>
                     </div>
                     </div>

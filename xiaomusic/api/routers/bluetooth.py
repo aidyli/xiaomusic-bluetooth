@@ -7,15 +7,19 @@ import urllib.request
 
 from fastapi import APIRouter, Depends, Query
 
-from xiaomusic.api.dependencies import log, verification
+from xiaomusic.api.dependencies import config, log, verification
 
 router = APIRouter(dependencies=[Depends(verification)])
 
-SIDECAR_BASE_URL = "http://127.0.0.1:58091"
+
+def _sidecar_base_url() -> str:
+    return (getattr(config, "bluetooth_sidecar_base", "") or "http://127.0.0.1:58091").rstrip("/")
 
 
-def _call_sidecar(path: str, timeout: int = 10):
-    url = f"{SIDECAR_BASE_URL}{path}"
+def _call_sidecar(path: str, timeout: int | None = None):
+    base = _sidecar_base_url()
+    timeout = timeout or getattr(config, "bluetooth_sidecar_timeout_sec", 20) or 20
+    url = f"{base}{path}"
     try:
         with urllib.request.urlopen(url, timeout=timeout) as resp:
             body = resp.read().decode("utf-8", errors="replace")
@@ -39,7 +43,7 @@ def _call_sidecar(path: str, timeout: int = 10):
 @router.get("/api/bluetooth/status")
 async def bluetooth_status():
     """Return sidecar health/status, including paired devices and current sink."""
-    return _call_sidecar("/status", timeout=10)
+    return _call_sidecar("/status")
 
 
 @router.get("/api/bluetooth/scan")
