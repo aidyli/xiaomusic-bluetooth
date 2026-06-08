@@ -168,6 +168,100 @@ services:
 - 端口；
 - 数据目录。
 
+### `BT_TARGET_MAC` 是什么
+
+`BT_TARGET_MAC` 是 **目标蓝牙音频设备的蓝牙 MAC 地址**，也就是 sidecar 最终要连接并输出声音的蓝牙设备地址。
+
+在本示例中：
+
+```yaml
+BT_TARGET_MAC: "44:F7:70:81:9C:C4"
+```
+
+含义是：让 `bt-audio-sidecar` 连接蓝牙地址为 `44:F7:70:81:9C:C4` 的设备。这个地址在当前部署中对应“立体声组合”。
+
+这个值不是固定值，换成你的蓝牙音箱、蓝牙功放、蓝牙耳机或其他 A2DP 接收设备时，需要改成你自己设备的 MAC 地址。
+
+获取方式有三种：
+
+#### 方法 1：通过 XiaoMusic 设置页扫描
+
+1. 打开 XiaoMusic 设置页；
+2. 进入“蓝牙播放”区域；
+3. 先让目标蓝牙设备进入可发现/配对模式；
+4. 点击“扫描”；
+5. 在扫描结果或设备下拉框中找到目标设备；
+6. 记录括号里的地址，例如：
+
+```text
+立体声组合 (44:F7:70:81:9C:C4)
+```
+
+然后把 compose 中的 `BT_TARGET_MAC` 改成这个地址。
+
+#### 方法 2：直接调用 sidecar 扫描接口
+
+扫描前先让目标设备进入可发现/配对模式，然后执行：
+
+```bash
+curl -fsS 'http://127.0.0.1:58091/scan?seconds=90'
+```
+
+扫描结果里通常会出现类似：
+
+```text
+Device 44:F7:70:81:9C:C4 立体声组合
+```
+
+其中 `44:F7:70:81:9C:C4` 就是要填入 `BT_TARGET_MAC` 的值。
+
+#### 方法 3：进入 sidecar 容器用 `bluetoothctl`
+
+```bash
+docker exec -it bt-audio-sidecar bluetoothctl
+```
+
+在交互界面中执行：
+
+```text
+power on
+agent on
+default-agent
+scan on
+```
+
+等待目标设备出现：
+
+```text
+[NEW] Device 44:F7:70:81:9C:C4 立体声组合
+```
+
+记录 `Device` 后面的地址，然后执行：
+
+```text
+scan off
+quit
+```
+
+如果设备已经配对过，也可以查看已知设备：
+
+```bash
+docker exec bt-audio-sidecar bluetoothctl devices
+```
+
+注意事项：
+
+- 蓝牙 MAC 地址格式通常是六组十六进制数，例如 `AA:BB:CC:DD:EE:FF`；
+- 扫描前必须让目标设备进入可发现/配对模式；
+- 建议扫描 60-120 秒，短扫描可能错过设备的可发现窗口；
+- 多个设备同时可见时，要根据设备名称确认不要填错；
+- 修改 `BT_TARGET_MAC` 后需要重建 sidecar 服务：
+
+```bash
+cd /volume2/docker/Docker/xiaomiai
+docker compose up -d --force-recreate bt-audio-sidecar
+```
+
 ## 持久化目录
 
 建议部署目录结构：
