@@ -1,6 +1,6 @@
 # XiaoMusic 蓝牙立体声组合版
 部署环境：绿联DX4600 docker compose容器部署，
-，仅个人需求进行更改；
+仅个人需求进行更改；
 这是基于 [hanxi/xiaomusic](https://github.com/hanxi/xiaomusic) 的蓝牙立体声组合部署版本。
 
 本仓库只保留与 **蓝牙 sidecar、蓝牙立体声组合输出、双音箱控制入口、部署/构建/验证** 相关的说明。XiaoMusic 原项目的完整功能、配置项、使用教程、开发文档和上游更新，请移步原项目：
