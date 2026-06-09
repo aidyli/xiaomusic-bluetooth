@@ -1,6 +1,8 @@
 // 获取二维码的函数（点击「获取二维码」后再请求并显示）
 let qrcodeCountdownTimer = null;
+let bluetoothScanCountdownTimer = null;
 const DEFAULT_QRCODE_EXPIRE_SECONDS = 120;
+const DEFAULT_BLUETOOTH_SCAN_SECONDS = 30;
 
 function stopQRCodeCountdown() {
   if (qrcodeCountdownTimer) {
@@ -95,6 +97,32 @@ function fetchQRCode() {
 $(function () {
   $("#refresh-qrcode").on("click", fetchQRCode);
 
+  function stopBluetoothScanCountdown(finalText) {
+    if (bluetoothScanCountdownTimer) {
+      clearInterval(bluetoothScanCountdownTimer);
+      bluetoothScanCountdownTimer = null;
+    }
+    if (finalText) {
+      $("#bluetooth_scan_countdown").text(finalText);
+    }
+  }
+
+  function startBluetoothScanCountdown(seconds) {
+    stopBluetoothScanCountdown();
+    let remainSeconds = Math.max(5, Math.min(180, parseInt(seconds, 10) || DEFAULT_BLUETOOTH_SCAN_SECONDS));
+    const $countdown = $("#bluetooth_scan_countdown");
+    const update = function () {
+      if (remainSeconds <= 0) {
+        stopBluetoothScanCountdown("扫描请求已完成，正在整理结果…");
+        return;
+      }
+      $countdown.text(`扫描倒计时：${remainSeconds} 秒`);
+      remainSeconds -= 1;
+    };
+    update();
+    bluetoothScanCountdownTimer = setInterval(update, 1000);
+  }
+
   function renderBluetoothResult(data) {
     const text = JSON.stringify(data, null, 2);
     $("#bluetooth_scan_result").text(text);
@@ -115,7 +143,11 @@ $(function () {
     }
 
     if (Array.isArray(data.devices)) {
-      data.devices.forEach((dev) => addDevice(dev.address || dev.mac || dev.addr, dev.name || dev.alias));
+      data.devices.forEach((dev) => {
+        const name = dev.name || dev.alias || dev.address || dev.mac || dev.addr;
+        const suffix = dev.audio_sink === false ? "（非音频输出）" : "";
+        addDevice(dev.address || dev.mac || dev.addr, `${name}${suffix}`);
+      });
     }
 
     const $select = $("#bluetooth_device_select");
@@ -150,8 +182,12 @@ $(function () {
   });
 
   $("#bluetooth_scan_btn").on("click", function () {
-    const seconds = Math.max(5, Math.min(180, parseInt($("#bluetooth_scan_seconds").val(), 10) || 90));
-    callBluetoothApi(`/api/bluetooth/scan?seconds=${seconds}&async=0`, `正在扫描蓝牙设备（${seconds} 秒），请确保目标设备处于可发现/配对模式…`, $(this));
+    const seconds = Math.max(5, Math.min(180, parseInt($("#bluetooth_scan_seconds").val(), 10) || DEFAULT_BLUETOOTH_SCAN_SECONDS));
+    startBluetoothScanCountdown(seconds);
+    callBluetoothApi(`/api/bluetooth/scan?seconds=${seconds}&async=0`, `正在扫描蓝牙设备（${seconds} 秒），请确保目标设备处于可发现/配对模式…`, $(this))
+      .always(function () {
+        stopBluetoothScanCountdown("扫描完成");
+      });
   });
 
   $("#bluetooth_connect_btn").on("click", function () {
@@ -161,7 +197,9 @@ $(function () {
   });
 
   $("#bluetooth_disconnect_btn").on("click", function () {
-    callBluetoothApi("/api/bluetooth/disconnect", "正在断开蓝牙设备…", $(this));
+    const address = $("#bluetooth_device_select").val() || "";
+    const query = address ? `?address=${encodeURIComponent(address)}` : "";
+    callBluetoothApi(`/api/bluetooth/disconnect${query}`, "正在断开蓝牙设备…", $(this));
   });
 
   // 遍历所有的select元素，默认选中只有1个选项的

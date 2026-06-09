@@ -72,12 +72,23 @@ function isOnlinePlaylistName(name) {
   return !!name && String(name).startsWith("_online_");
 }
 
+const GENERIC_PLAYLIST_NAMES = new Set(["全部", "所有歌曲", "所有电台"]);
+
+function isGenericPlaylistName(name) {
+  return GENERIC_PLAYLIST_NAMES.has(String(name || ""));
+}
+
 function findPlaylistContainingMusic(musicName, preferredPlaylist) {
   if (!musicName || !latestMusicListData) return "";
-  if (preferredPlaylist && Array.isArray(latestMusicListData[preferredPlaylist])) {
+  if (
+    preferredPlaylist &&
+    !isGenericPlaylistName(preferredPlaylist) &&
+    !isOnlinePlaylistName(preferredPlaylist) &&
+    Array.isArray(latestMusicListData[preferredPlaylist])
+  ) {
     if (latestMusicListData[preferredPlaylist].includes(musicName)) return preferredPlaylist;
   }
-  const skip = new Set(["全部", "所有歌曲", "所有电台"]);
+  const skip = GENERIC_PLAYLIST_NAMES;
   for (const [listName, songs] of Object.entries(latestMusicListData)) {
     if (skip.has(listName) || isOnlinePlaylistName(listName) || !Array.isArray(songs)) continue;
     if (songs.includes(musicName)) return listName;
@@ -98,6 +109,12 @@ function shouldUpdatePlaylistFromPlaying(curPlaylist) {
 
   if (userJustSelected) {
     return false;
+  }
+
+  // 聚合歌单（所有歌曲/全部）无法表达歌曲真实来源；如果能定位到具体歌单，允许 UI
+  // 从聚合歌单切到具体歌单，修正“播放列表”和“播放中歌曲”显示不一致的问题。
+  if (isGenericPlaylistName(currentPlaylist) && !isGenericPlaylistName(curPlaylist)) {
+    return true;
   }
 
   // 语音指令播放本地歌曲时，前端可能仍停留在上一轮在线播放临时歌单（如 _online_webPush）。
@@ -597,6 +614,16 @@ function syncPlayingSelection(curPlaylist, curMusic) {
   const $musicName = $("#music_name");
   const currentPlaylist = $musicList.val() || localStorage.getItem("cur_playlist") || "";
   let effectivePlaylist = curPlaylist;
+
+  // “所有歌曲/全部”这类聚合歌单不是精确来源。后端只能返回聚合歌单时，
+  // 前端用已加载的 musiclist 反查歌曲所属的第一个具体歌单，让“播放中”和下拉框
+  // 尽量显示可理解的专辑/目录，而不是长期停在“所有歌曲”。
+  if (isGenericPlaylistName(effectivePlaylist)) {
+    const concretePlaylist = findPlaylistContainingMusic(curMusic, "");
+    if (concretePlaylist && !isGenericPlaylistName(concretePlaylist)) {
+      effectivePlaylist = concretePlaylist;
+    }
+  }
 
   // 从线上临时歌单切回本地语音播放时，后端偶尔仍会短暂推送旧的 _online_* cur_playlist。
   // 只要当前播放歌曲能在本地歌单中定位，就用本地歌单修正 UI，而不是继续卡在线上播放列表。

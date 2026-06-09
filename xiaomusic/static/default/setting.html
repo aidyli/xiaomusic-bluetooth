@@ -9,9 +9,8 @@
     <link rel="preload" href="./materialicons.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="./materialiconsoutlined.woff2" as="font" type="font/woff2" crossorigin>
     <script src="./jquery-3.7.1.min.js?version=1779336642"></script>
-    <script src="./setting.js?version=bluetooth-sidecar-http-v3"></script>
+    <script src="./setting.js?version=4.2"></script>
     <link rel="stylesheet" type="text/css" href="./setting.css?version=1779336642" />
-    <meta name="xiaomusic-deploy-version" content="bluetooth-sidecar-http-v3">
 
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-Z09NC1K7ZW"></script>
     <script>
@@ -29,7 +28,6 @@
         <div class="header-inner">
             <h2>
                 <span>小爱音箱设置面板</span>
-                <span id="deploy-version" style="display:block;font-size:12px;line-height:1.6;opacity:.72;">部署版本：bluetooth-sidecar-http-v3</span>
             </h2>
             <div class="header-buttons">
                 <button onclick="location.href = '/static/default/index.html'" aria-label="返回首页">
@@ -350,11 +348,12 @@
                         </details>
 
                         <div class="login-tips">
-                            实时扫描前请先让蓝牙音箱/立体声组合进入可发现或配对模式；经典 A2DP 设备建议扫描 90~120 秒。扫描会由 bt-audio-sidecar 独占 USB 蓝牙适配器执行。
+                            实时扫描前请先让蓝牙音箱/立体声组合进入可发现或配对模式；默认扫描 30 秒。扫描会由 bt-audio-sidecar 独占 USB 蓝牙适配器执行。
                         </div>
 
                         <label for="bluetooth_scan_seconds">实时扫描秒数:</label>
-                        <input id="bluetooth_scan_seconds" type="number" value="90" min="5" max="180" />
+                        <input id="bluetooth_scan_seconds" type="number" value="30" min="5" max="180" />
+                        <span id="bluetooth_scan_countdown" class="login-tips" style="display:inline-block;margin-left:8px;">未开始扫描</span>
 
                         <button type="button" id="bluetooth_scan_btn" class="option-inline mini-button">实时扫描蓝牙设备</button>
                         <button type="button" id="bluetooth_status_btn" class="option-inline mini-button">刷新蓝牙状态</button>

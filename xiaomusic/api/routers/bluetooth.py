@@ -79,6 +79,13 @@ async def bluetooth_connect(
 
 
 @router.get("/api/bluetooth/disconnect")
-async def bluetooth_disconnect():
-    """Disconnect sidecar from current Bluetooth target."""
-    return _call_sidecar("/disconnect", timeout=20)
+async def bluetooth_disconnect(
+    address: str = Query(
+        "", description="Bluetooth MAC address; empty disconnects sidecar current/default target"
+    ),
+):
+    """Disconnect sidecar from current or selected Bluetooth target."""
+    query = ""
+    if address:
+        query = "?" + urllib.parse.urlencode({"address": address})
+    return _call_sidecar(f"/disconnect{query}", timeout=20)
